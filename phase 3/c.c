@@ -9,6 +9,7 @@
 #include <sys/shm.h>
 #include <sys/sem.h>
 #include <sys/msg.h>
+#include <signal.h>
 #define BSZ 0
 #define NUM 1
 #define ADD 2
@@ -27,7 +28,25 @@ union Semun
     struct seminfo *__buf; /* buffer for IPC_INFO */
     void *__pad;
 };
-
+void cleanSegements(int bdataid, int bufferid, int msgq_id, int mutex)
+{
+    if (bdataid != -1)
+    {
+        shmctl(bdataid, IPC_RMID, (struct shmid_ds *)0);
+    }
+    if (bufferid != -1)
+    {
+        shmctl(bufferid, IPC_RMID, (struct shmid_ds *)0);
+    }
+    if (msgq_id != -1)
+    {
+        msgctl(msgq_id, IPC_RMID, (struct msqid_ds *)0);
+    }
+    if (mutex != -1)
+    {
+        semctl(mutex, 0, IPC_RMID);
+    }
+}
 void down(int sem)
 {
     struct sembuf p_op;
@@ -57,15 +76,14 @@ void up(int sem)
         exit(-1);
     }
 }
-
+int bdataid = -1, bufferid = -1, msgq_id = -1, mutex = -1;
 int main()
 {
-
     union Semun semun;
     int rec_val, send_val;
-    int bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
-    int msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
-    int mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
+    bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
+    msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
+    mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
     if (mutex == -1 || msgq_id == -1)
     {
         perror("Error in create");
@@ -74,6 +92,7 @@ int main()
     if (bdataid == -1)
     {
         printf("No buffer found\n");
+        cleanSegements(bdataid, bufferid, msgq_id, mutex);
         exit(-1);
     }
     ////////////////////// wait and attach the shared memory ////////////////////////////////
@@ -81,15 +100,17 @@ int main()
     if (*((int *)shmaddr) == -1)
     {
         perror("Error in attach in data writer");
+        cleanSegements(bdataid, bufferid, msgq_id, mutex);
         exit(-1);
     }
 
     int *pdata = (int *)shmaddr;
-    int bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], 0644);
+    bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], 0644);
     void *shmaddr2 = shmat(bufferid, (void *)0, 0);
     if (*((int *)shmaddr2) == -1)
     {
         perror("Error in attach in buffer writer");
+        cleanSegements(bdataid, bufferid, msgq_id, mutex);
         exit(-1);
     }
     int *pbuffer = (int *)shmaddr2;
@@ -102,7 +123,10 @@ int main()
         rec_val = msgrcv(msgq_id, &message, sizeof(message.mtext), 2, IPC_NOWAIT); // clear buffer
         down(mutex);
         if (pdata[NUM] < 0)
-            exit(1);              /* underflow */
+        {
+            exit(1); /* underflow */
+            cleanSegements(bdataid, bufferid, msgq_id, mutex);
+        }
         else if (pdata[NUM] == 0) /* block if buffer empty */
         {
             printf("\nnext step : wait for producer to send ");
@@ -135,4 +159,9 @@ int main()
     }
 
     return 0;
+}
+
+void handler(int signum)
+{
+    killpg(getpgrp(), SIGKILL);
 }
