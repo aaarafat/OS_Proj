@@ -77,8 +77,14 @@ void up(int sem)
     }
 }
 int bdataid = -1, bufferid = -1, msgq_id = -1, mutex = -1;
+void handler(int signum)
+{
+    cleanSegements(bdataid, bufferid, msgq_id, mutex);
+    killpg(getpgrp(), SIGKILL);
+}
 int main()
 {
+    signal(SIGINT, handler);
     union Semun semun;
     int rec_val, send_val;
     bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
@@ -159,9 +165,4 @@ int main()
     }
 
     return 0;
-}
-
-void handler(int signum)
-{
-    killpg(getpgrp(), SIGKILL);
 }
