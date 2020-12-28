@@ -1,4 +1,5 @@
 #include <stdio.h>      //if you don't use scanf/printf change this include
+#include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
@@ -16,6 +17,9 @@ typedef short bool;
 #define false 1
 
 #define SHKEY 300
+#define PROC_SH_KEY 400
+#define PROC_MSQ_DOWN_KEY 500
+#define PROC_MSQ_UP_KEY 501
 
 
 ///==============================
@@ -75,3 +79,22 @@ struct ProcessStruct
 };
 
 typedef struct ProcessStruct process;
+
+enum SchedulingAlgorithms
+{
+    HPF,
+    SRTN,
+    RR,
+    NO_OF_ALGORITHMS,
+    NOT_SELECTED = -1
+};
+
+struct msgbuf {
+    long mtype;
+    char mtext;
+};
+
+enum GeneratorMessages {
+    WAIT_FOR_NEXT_PROCESS,
+    COMPLETE
+};
