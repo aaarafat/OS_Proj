@@ -1,6 +1,7 @@
 #include "linked_list.h"
 
 void init();
+void processTerminatedHandler(int signum);
 
 // --------ALgorithms------
 void highestPriorityFirst();
@@ -19,6 +20,7 @@ int forkNewProcess(int id, int remainingTime);
 void resumeProcess(Node *processNode);
 void stopProcess(Node *processNode);
 void removeProcess(Node *processNode);
+void updateProcess(Node *processNode);
 
 int shmid, msqdownid, msqupid;
 process *shm_proc_addr;
@@ -28,6 +30,8 @@ int remainingProcesses = 0;
 bool processIsComming = true;
 
 Node *runningProcessNode;
+
+int now; // current clock
 
 int main(int argc, char *argv[])
 {
@@ -98,6 +102,9 @@ void init()
 
     // initialize clock
     initClk();
+
+    // init signal handler
+    signal(SIGUSR1, processTerminatedHandler);
 }
 
 int forkNewProcess(int id, int remainingTime)
@@ -129,7 +136,7 @@ int forkNewProcess(int id, int remainingTime)
 void storeProcessData()
 {
     process p = *shm_proc_addr;
-    printf("ID=%d\n", p.id);
+    printf("process ID=%d Arrived Time = %d\n", p.id, now);
     Node *newNode = (Node *)malloc(sizeof(Node));
     // initialize newNode
     newNode->process = p;
@@ -140,7 +147,8 @@ void storeProcessData()
     newNode->PCB.PID = -1; // -1 means the process not created
     newNode->PCB.shmid = initShm(p.id);
     // insert new process to the linked list
-    insert(head, newNode);
+    insert(&head, &newNode);
+
     remainingProcesses++;
 }
 
@@ -172,9 +180,6 @@ void readProcessesData()
 
 void resumeProcess(Node *processNode)
 {
-    if (processNode == NULL)
-        processNode = head;
-
     // set process state to running
     processNode->PCB.processState = RUNNING;
 
@@ -199,13 +204,33 @@ void stopProcess(Node *processNode)
 }
 void removeProcess(Node *processNode)
 {
-    processNode = removeNodeWithID(head, processNode->process.id);
+    processNode = removeNodeWithID(&head, processNode->process.id);
     if (processNode != NULL)
     {
         // TODO : output the results
         free(processNode);
         remainingProcesses--;
     }
+}
+
+void updateProcess(Node *processNode)
+{
+    if (processNode->PCB.processState == TERMINATED)
+        return;
+
+    int remainingTime = getShmValue(processNode->PCB.shmid);
+    int dif = processNode->PCB.remainingTime - remainingTime;
+
+    processNode->PCB.remainingTime = remainingTime;
+    processNode->PCB.executionTime += dif;
+
+    int arrivalTime = processNode->process.arrivaltime;
+    int executionTime = processNode->PCB.executionTime;
+
+    processNode->PCB.waitingTime = getClk() - arrivalTime - executionTime;
+
+    if (remainingTime <= 0)
+        processNode->PCB.processState = TERMINATED;
 }
 
 void highestPriorityFirst() {}
@@ -216,14 +241,18 @@ void roundRobin(int quantum)
     int currentQuantum = 0;
     while (remainingProcesses || processIsComming)
     {
-        int now = getClk();
+        now = getClk();
 
         readProcessesData();
 
-        if (remainingProcesses)
+        if (remainingProcesses && currentQuantum <= 0)
         {
+            if (runningProcessNode == NULL)
+                runningProcessNode = head;
+
             resumeProcess(runningProcessNode);
             currentQuantum = quantum;
+            printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
         }
 
         sleep(1);
@@ -234,10 +263,13 @@ void roundRobin(int quantum)
         {
             currentQuantum -= (getClk() - now);
 
+            updateProcess(runningProcessNode);
+
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
                 removeProcess(runningProcessNode);
                 runningProcessNode = runningProcessNode->next;
+                currentQuantum = 0;
             }
             else if (currentQuantum <= 0)
             {
@@ -271,7 +303,7 @@ int getShmValue(int shmid)
 
     if ((long)shmaddr == -1)
     {
-        printf("Error in attaching the shm in process with id: %d\n", id);
+        printf("Error in attaching the shm in process with id: %d\n", shmid);
         perror("");
         exit(-1);
     }
@@ -279,4 +311,16 @@ int getShmValue(int shmid)
     int value = *shmaddr;
     shmdt(shmaddr);
     return value;
+}
+
+void processTerminatedHandler(int signum)
+{
+    if (runningProcessNode)
+    {
+        runningProcessNode->PCB.processState = TERMINATED;
+        runningProcessNode->PCB.remainingTime = 0;
+        runningProcessNode->PCB.executionTime = runningProcessNode->process.runningtime;
+    }
+
+    printf("process ID=%d terminated\n", runningProcessNode->process.id);
 }

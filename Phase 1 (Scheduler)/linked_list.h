@@ -39,18 +39,18 @@ Node *createLinkedList()
 }
 
 /* insert newNode to linked list with head */
-void insert(Node *head, Node *newNode)
+void insert(Node **head, Node **newNode)
 {
-  if (head == NULL)
+  if (*head == NULL)
   {
-    head = newNode;
+    *head = *newNode;
     return;
   }
 
-  Node *tmpNode = head;
+  Node *tmpNode = *head;
   while (tmpNode->next != NULL)
     tmpNode = tmpNode->next;
-  tmpNode->next = newNode;
+  tmpNode->next = *newNode;
 }
 
 /* 
@@ -58,16 +58,16 @@ remove a node from linkec list with the given id
 returns the removed Node 
 (if the node is not found returns NULL)
 */
-Node *removeNodeWithID(Node *head, int id)
+Node *removeNodeWithID(Node **head, int id)
 {
-  if (head == NULL)
-    return head;
+  if (*head == NULL)
+    return *head;
 
-  Node *tmpNode = head;
+  Node *tmpNode = *head;
 
-  if (head->process.id == id)
+  if ((*head)->process.id == id)
   {
-    head = head->next;
+    *head = (*head)->next;
     return tmpNode;
   }
 
