@@ -1,4 +1,5 @@
 #include "headers.h"
+#include "linked_list.h"
 
 // --------ALgorithms------
 void highestPriorityFirst();

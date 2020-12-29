@@ -1,9 +1,29 @@
 #include "headers.h"
 
+enum processState
+{
+  RUNNING,
+  WAITING,
+  NO_STATES
+};
+
+/* PCP struct */
+struct PCB_Struct
+{
+  processState processState;
+  int executionTime;
+  int remainingTime;
+  int waitingTime;
+  int PID;
+};
+
+typedef struct PCB_Struct PCB;
+
 /* processes data node struct */
 struct Node
 {
   process process;
+  PCB PCB;
   Node *next;
 };
 
@@ -58,4 +78,13 @@ Node *removeNodeWithID(Node *head, int id)
   tmpNode->next = removedNode->next;
 
   return removedNode;
+}
+
+/* find Node with the given id (returns NULL if not found) */
+Node *findNodeWithID(Node *head, int id)
+{
+  Node *tmpNode = head;
+  while (tmpNode != NULL && tmpNode->process.id != id)
+    tmpNode = tmpNode->next;
+  return tmpNode;
 }
