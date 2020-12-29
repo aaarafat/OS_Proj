@@ -10,7 +10,7 @@ enum processState
 /* PCP struct */
 struct PCB_Struct
 {
-  processState processState;
+  enum processState processState;
   int executionTime;
   int remainingTime;
   int waitingTime;
@@ -20,12 +20,14 @@ struct PCB_Struct
 typedef struct PCB_Struct PCB;
 
 /* processes data node struct */
-struct Node
+struct NodeStruct
 {
   process process;
   PCB PCB;
-  Node *next;
+  struct NodeStruct *next;
 };
+
+typedef struct NodeStruct Node;
 
 /* create empty linked list */
 Node *createLinkedList()

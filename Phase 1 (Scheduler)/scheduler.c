@@ -1,16 +1,18 @@
-#include "headers.h"
 #include "linked_list.h"
 
 // --------ALgorithms------
 void highestPriorityFirst();
 void shortestRemainingTimeNext();
-void roundRobin();
+void roundRobin(int quantum);
 // ------------------------
 
 void readProcessesData();
+void storeProcessData();
+int forkNewProcess(int id, int remainingTime);
 
 int shmid, msqdownid, msqupid;
 process *shm_proc_addr;
+Node *head;
 
 void init();
 
@@ -20,6 +22,8 @@ int main(int argc, char *argv[])
     init();
 
     printf("scheduler starting...\n");
+
+    head = createLinkedList();
 
     readProcessesData();
 
@@ -34,7 +38,7 @@ int main(int argc, char *argv[])
         shortestRemainingTimeNext();
         break;
     case RR:
-        roundRobin();
+        roundRobin(quantum);
         break;
     }
 
@@ -84,6 +88,47 @@ void init()
     initClk();
 }
 
+int forkNewProcess(int id, int remainingTime)
+{
+    int processPID = fork();
+    if (processPID == 0)
+    {
+        // convert args to char*
+        char execStr1[MAX_DIGITS + 1];
+        char execStr2[MAX_DIGITS + 1];
+        snprintf(execStr1, MAX_DIGITS + 1, "%d", id);
+        snprintf(execStr2, MAX_DIGITS + 1, "%d", remainingTime);
+
+        execl("./process.out", "process.out", execStr1, execStr2, (char *)0);
+        printf("Error in executing process.out\n");
+        destroyClk(true);
+        exit(1);
+    }
+    else if (processPID == -1)
+    {
+        perror("error in forking process");
+        destroyClk(true);
+        exit(1);
+    }
+
+    return processPID;
+}
+
+void storeProcessData()
+{
+    process p = *shm_proc_addr;
+    Node *newNode = (Node *)malloc(sizeof(Node));
+    // initialize newNode
+    newNode->process = p;
+    newNode->PCB.executionTime = 0;
+    newNode->PCB.processState = WAITING;
+    newNode->PCB.remainingTime = p.runningtime;
+    newNode->PCB.waitingTime = 0;
+    newNode->PCB.PID = -1; // -1 means the process not created
+    // insert new process to the linked list
+    insert(head, newNode);
+}
+
 void readProcessesData()
 {
     struct msgbuf message;
@@ -93,8 +138,7 @@ void readProcessesData()
         if (recValue == -1)
             break;
 
-        // store the data
-        printf("boooom\n");
+        storeProcessData();
 
         message.mtext = COMPLETE;
         int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
@@ -108,4 +152,14 @@ void readProcessesData()
 
 void highestPriorityFirst() {}
 void shortestRemainingTimeNext() {}
-void roundRobin() {}
+void roundRobin(int quantum)
+{
+    while (1)
+    {
+        int now = getClk();
+        readProcessesData();
+
+        while (now != getClk())
+            ;
+    }
+}

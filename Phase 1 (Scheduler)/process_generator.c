@@ -71,7 +71,6 @@ int main(int argc, char *argv[])
         // 6. Send the information to the scheduler at the appropriate time.
         if (parr[currentProcess].arrivaltime <= getClk())
         {
-            printf("%d\n", parr[currentProcess].arrivaltime);
             *shmaddr = parr[currentProcess];
             currentProcess++;
             message.mtext = COMPLETE;
