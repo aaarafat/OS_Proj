@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
     struct msgbuf message;
     int currentProcess = 0;
     // Generation Main Loop
-    while (currentProcess < n) //TODO: CHANGE!!
+    while (currentProcess < n)
     {
         // 6. Send the information to the scheduler at the appropriate time.
         if (parr[currentProcess].arrivaltime <= getClk())
@@ -86,6 +86,11 @@ int main(int argc, char *argv[])
                 perror("Error in receive");
         }
     }
+    message.mtext = FINISHED;
+    int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
+    if (sendValue == -1)
+        perror("Error in send");
+    while(true);
     // 7. Clear clock resources
     destroyClk(true);
 }
@@ -181,35 +186,6 @@ void getAlgo(int *schAlgo, int *quantum, int argc, char *argv[])
     }
 }
 
-/*
-    clkPID = fork();
-    printf("%d", clkPID);
-    if(clkPID == 0)
-    {
-        execl("./clk.out", "", (char *)0);
-        printf("Error in executing clk.out\n");
-        exit(1);
-    }
-    else if(clkPID == -1)
-    {
-        perror("error in forking clk");
-        exit(1);
-    }
-    schPID = fork();
-    if(schPID == 0)
-    {
-        execl("./scheduler.out", "", (char *)0);
-        printf("Error in executing scheduler.out\n");
-        destroyClk(true);
-        exit(1);
-    }
-    else if(schPID == -1)
-    {
-        perror("error in forking clk");
-        destroyClk(true);
-        exit(1);
-    }
-*/
 
 void initProcesses(int *clkPID, int *schPID, int schAlgo, int quantum)
 {

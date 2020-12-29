@@ -94,5 +94,6 @@ struct msgbuf
 enum GeneratorMessages
 {
     WAIT_FOR_NEXT_PROCESS,
-    COMPLETE
+    COMPLETE,
+    FINISHED
 };
