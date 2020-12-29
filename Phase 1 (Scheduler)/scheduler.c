@@ -1,14 +1,24 @@
 #include "linked_list.h"
 
+void init();
+
 // --------ALgorithms------
 void highestPriorityFirst();
 void shortestRemainingTimeNext();
 void roundRobin(int quantum);
 // ------------------------
 
+/*shared memory handlers*/
+int initShm(int id);
+int getShmValue(int shmid);
+
 void readProcessesData();
 void storeProcessData();
 int forkNewProcess(int id, int remainingTime);
+
+void resumeProcess(Node *processNode);
+void stopProcess(Node *processNode);
+void removeProcess(Node *processNode);
 
 int shmid, msqdownid, msqupid;
 process *shm_proc_addr;
@@ -17,7 +27,7 @@ Node *head;
 int remainingProcesses = 0;
 bool processIsComming = true;
 
-void init();
+Node *runningProcessNode;
 
 int main(int argc, char *argv[])
 {
@@ -52,7 +62,6 @@ int main(int argc, char *argv[])
     //Switch between two processes according to the scheduling algorithm. (Stop the old process and save its state and start/resume another one.)
     //Keep a process control block (PCB) for each process in the system.
     //Delete the data of a process when it gets noties that it nished.
-    sleep(5);
     printf("scheduler terminates...\n");
     destroyClk(true);
 }
@@ -129,9 +138,10 @@ void storeProcessData()
     newNode->PCB.remainingTime = p.runningtime;
     newNode->PCB.waitingTime = 0;
     newNode->PCB.PID = -1; // -1 means the process not created
+    newNode->PCB.shmid = initShm(p.id);
     // insert new process to the linked list
     insert(head, newNode);
-    // remainingProcesses++;
+    remainingProcesses++;
 }
 
 void readProcessesData()
@@ -160,16 +170,113 @@ void readProcessesData()
     }
 }
 
+void resumeProcess(Node *processNode)
+{
+    if (processNode == NULL)
+        processNode = head;
+
+    // set process state to running
+    processNode->PCB.processState = RUNNING;
+
+    // if this is the first time i run the process
+    if (processNode->PCB.PID == -1)
+    {
+        processNode->PCB.PID = forkNewProcess(
+            processNode->process.id,
+            processNode->process.runningtime);
+    }
+    else
+    {
+        // send signal to resume
+        kill(processNode->PCB.PID, SIGCONT);
+    }
+}
+
+void stopProcess(Node *processNode)
+{
+    processNode->PCB.processState = WAITING;
+    kill(processNode->PCB.PID, SIGTSTP);
+}
+void removeProcess(Node *processNode)
+{
+    processNode = removeNodeWithID(head, processNode->process.id);
+    if (processNode != NULL)
+    {
+        // TODO : output the results
+        free(processNode);
+        remainingProcesses--;
+    }
+}
+
 void highestPriorityFirst() {}
 void shortestRemainingTimeNext() {}
 void roundRobin(int quantum)
 {
+    runningProcessNode = NULL;
+    int currentQuantum = 0;
     while (remainingProcesses || processIsComming)
     {
         int now = getClk();
+
         readProcessesData();
+
+        if (remainingProcesses)
+        {
+            resumeProcess(runningProcessNode);
+            currentQuantum = quantum;
+        }
+
         sleep(1);
         while (now == getClk())
             ;
+
+        if (remainingProcesses)
+        {
+            currentQuantum -= (getClk() - now);
+
+            if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
+            {
+                removeProcess(runningProcessNode);
+                runningProcessNode = runningProcessNode->next;
+            }
+            else if (currentQuantum <= 0)
+            {
+                stopProcess(runningProcessNode);
+                runningProcessNode = runningProcessNode->next;
+            }
+        }
     }
+}
+
+/*initlizer remainging time as a shared memory varible*/
+int initShm(int id)
+{
+    /*creating shared memory variable*/
+    int shmKey = ftok("keyFile", id);
+    int shmid = shmget(shmKey, 4, IPC_CREAT | 0666);
+    if ((long)shmid == -1)
+    {
+        perror("Error in creating shm!");
+        exit(-1);
+    }
+
+    return shmid;
+}
+
+/*get shared memory current value*/
+int getShmValue(int shmid)
+{
+    //attach shared memory
+    int *shmaddr = (int *)shmat(shmid, (void *)0, 0);
+
+    if ((long)shmaddr == -1)
+    {
+        printf("Error in attaching the shm in process with id: %d\n", id);
+        perror("");
+        exit(-1);
+    }
+    // deatach shared memory
+    int value = *shmaddr;
+    shmdt(shmaddr);
+    return value;
 }

@@ -4,6 +4,7 @@ enum processState
 {
   RUNNING,
   WAITING,
+  TERMINATED,
   NO_STATES
 };
 
@@ -15,6 +16,7 @@ struct PCB_Struct
   int remainingTime;
   int waitingTime;
   int PID;
+  int shmid;
 };
 
 typedef struct PCB_Struct PCB;
