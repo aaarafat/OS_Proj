@@ -90,7 +90,8 @@ int main(int argc, char *argv[])
     int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
     if (sendValue == -1)
         perror("Error in send");
-    while(true);
+    while (true)
+        ;
     // 7. Clear clock resources
     destroyClk(true);
 }
@@ -185,7 +186,6 @@ void getAlgo(int *schAlgo, int *quantum, int argc, char *argv[])
         exit(1);
     }
 }
-
 
 void initProcesses(int *clkPID, int *schPID, int schAlgo, int quantum)
 {

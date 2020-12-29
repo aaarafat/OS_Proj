@@ -14,6 +14,9 @@ int shmid, msqdownid, msqupid;
 process *shm_proc_addr;
 Node *head;
 
+int remainingProcesses = 0;
+bool processIsComming = true;
+
 void init();
 
 int main(int argc, char *argv[])
@@ -117,6 +120,7 @@ int forkNewProcess(int id, int remainingTime)
 void storeProcessData()
 {
     process p = *shm_proc_addr;
+    printf("ID=%d\n", p.id);
     Node *newNode = (Node *)malloc(sizeof(Node));
     // initialize newNode
     newNode->process = p;
@@ -127,25 +131,31 @@ void storeProcessData()
     newNode->PCB.PID = -1; // -1 means the process not created
     // insert new process to the linked list
     insert(head, newNode);
+    // remainingProcesses++;
 }
 
 void readProcessesData()
 {
     struct msgbuf message;
-    while (1)
+    while (processIsComming)
     {
-        int recValue = msgrcv(msqupid, &message, sizeof(message.mtext), 0, IPC_NOWAIT);
+        int recValue = msgrcv(msqdownid, &message, sizeof(message.mtext), 0, IPC_NOWAIT);
         if (recValue == -1)
             break;
 
+        if (message.mtext == FINISHED)
+        {
+            processIsComming = false;
+            break;
+        }
+
         storeProcessData();
 
-        message.mtext = COMPLETE;
-        int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
+        int sendValue = msgsnd(msqupid, &message, sizeof(message.mtext), !IPC_NOWAIT);
         if (sendValue == -1)
             perror("Error in send");
 
-        if (recValue == COMPLETE)
+        if (message.mtext == COMPLETE)
             break;
     }
 }
@@ -154,12 +164,12 @@ void highestPriorityFirst() {}
 void shortestRemainingTimeNext() {}
 void roundRobin(int quantum)
 {
-    while (1)
+    while (remainingProcesses || processIsComming)
     {
         int now = getClk();
         readProcessesData();
-
-        while (now != getClk())
+        sleep(1);
+        while (now == getClk())
             ;
     }
 }
