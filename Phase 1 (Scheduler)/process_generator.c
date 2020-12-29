@@ -2,7 +2,7 @@
 
 void clearResources(int);
 void getAlgo(int *, int *, int, char **);
-void initProcesses(int *, int *);
+void initProcesses(int *, int *, int, int);
 int getNumOfProcesses(FILE *);
 void readProcesses(FILE *, process *);
 
@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     getAlgo(&schAlgo, &quantum, argc, argv);
     // 3. Initiate and create the scheduler and clock processes.
     int clkPID, schPID;
-    initProcesses(&clkPID, &schPID);
+    initProcesses(&clkPID, &schPID, schAlgo, quantum);
     // 4. Use this function after creating the clock process to initialize clock
     initClk();
     /* Creating Shared Memory Segment */
@@ -71,6 +71,7 @@ int main(int argc, char *argv[])
         // 6. Send the information to the scheduler at the appropriate time.
         if (parr[currentProcess].arrivaltime <= getClk())
         {
+            printf("%d\n", parr[currentProcess].arrivaltime);
             *shmaddr = parr[currentProcess];
             currentProcess++;
             message.mtext = COMPLETE;
@@ -80,7 +81,7 @@ int main(int argc, char *argv[])
             int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
             if (sendValue == -1)
                 perror("Error in send");
-            
+
             int recValue = msgrcv(msqupid, &message, sizeof(message.mtext), 0, !IPC_NOWAIT);
             if (recValue == -1)
                 perror("Error in receive");
@@ -211,12 +212,12 @@ void getAlgo(int *schAlgo, int *quantum, int argc, char *argv[])
     }
 */
 
-void initProcesses(int *clkPID, int *schPID)
+void initProcesses(int *clkPID, int *schPID, int schAlgo, int quantum)
 {
     *clkPID = fork();
     if (*clkPID == 0)
     {
-        execl("./clk.out", "", (char *)0);
+        execl("./clk.out", "clk.out", (char *)0);
         printf("Error in executing clk.out\n");
         exit(1);
     }
@@ -228,7 +229,13 @@ void initProcesses(int *clkPID, int *schPID)
     *schPID = fork();
     if (*schPID == 0)
     {
-        execl("./scheduler.out", "", (char *)0);
+        // convert args to char*
+        char execStr1[2];
+        char execStr2[MAX_DIGITS + 1];
+        snprintf(execStr1, 2, "%d", schAlgo);
+        snprintf(execStr2, MAX_DIGITS + 1, "%d", quantum);
+
+        execl("./scheduler.out", "scheduler.out", execStr1, execStr2, (char *)0);
         printf("Error in executing scheduler.out\n");
         destroyClk(true);
         exit(1);

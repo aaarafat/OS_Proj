@@ -1,4 +1,4 @@
-#include <stdio.h>      //if you don't use scanf/printf change this include
+#include <stdio.h> //if you don't use scanf/printf change this include
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -14,26 +14,23 @@
 
 typedef short bool;
 #define true 1
-#define false 1
+#define false 0
 
 #define SHKEY 300
 #define PROC_SH_KEY 400
 #define PROC_MSQ_DOWN_KEY 500
 #define PROC_MSQ_UP_KEY 501
-
+#define MAX_DIGITS 25
 
 ///==============================
 //don't mess with this variable//
-int * shmaddr;                 //
+int *shmaddr; //
 //===============================
-
-
 
 int getClk()
 {
     return *shmaddr;
 }
-
 
 /*
  * All process call this function at the beginning to establish communication between them and the clock module.
@@ -49,9 +46,8 @@ void initClk()
         sleep(1);
         shmid = shmget(SHKEY, 4, 0444);
     }
-    shmaddr = (int *) shmat(shmid, (void *)0, 0);
+    shmaddr = (int *)shmat(shmid, (void *)0, 0);
 }
-
 
 /*
  * All process call this function at the end to release the communication
@@ -89,12 +85,14 @@ enum SchedulingAlgorithms
     NOT_SELECTED = -1
 };
 
-struct msgbuf {
+struct msgbuf
+{
     long mtype;
     char mtext;
 };
 
-enum GeneratorMessages {
+enum GeneratorMessages
+{
     WAIT_FOR_NEXT_PROCESS,
     COMPLETE
 };
