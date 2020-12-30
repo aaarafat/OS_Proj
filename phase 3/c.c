@@ -94,10 +94,23 @@ int main()
     bdata[2] = 0;    // add here
     bdata[3] = 0;    // remove from here
     int buff[bsize]; // buffer array itself
+    int consumer = semget(ftok("key", 102), 1, 0666 | IPC_CREAT);
+    semun.val = 1; /* initial value of the semaphore, Binary semaphore */
+    if (semctl(consumer, 0, SETVAL, semun) == -1)
+    {
+
+        perror("Error in semctl");
+        exit(-1);
+    }
+    int producer = semget(ftok("key", 101), 1, 0666);
+    down(consumer);
+    if (producer != -1)
+    {
+        down(producer);
+    }
     bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
     msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
     mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
-
     int *pdata;
     if (mutex == -1 || msgq_id == -1)
     {
@@ -124,6 +137,9 @@ int main()
             pdata[i] = bdata[i];
         }
     }
+    if (producer != -1)
+        up(producer);
+    up(consumer);
     ////////////////////// wait and attach the shared memory ////////////////////////////////
     void *shmaddr = shmat(bdataid, (void *)0, 0);
     printf("attached to shared memory \n");

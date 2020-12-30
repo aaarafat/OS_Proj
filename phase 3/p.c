@@ -60,7 +60,7 @@ struct msgbuff
 
 int main()
 {
-
+    union Semun semun;
     int send_val, rec_val;
     int bsize = 0;
     int bdata[4];
@@ -69,6 +69,18 @@ int main()
     bdata[2] = 0;    // add here
     bdata[3] = 0;    // remove from here
     int buff[bsize]; // buffer array itself
+    int producer = semget(ftok("key", 101), 1, 0666 | IPC_CREAT);
+    semun.val = 1; /* initial value of the semaphore, Binary semaphore */
+    if (semctl(producer, 0, SETVAL, semun) == -1)
+    {
+
+        perror("Error in semctl");
+        exit(-1);
+    }
+    int consumer = semget(ftok("key", 102), 1, 0666);
+    down(producer);
+    if (consumer != -1)
+        down(consumer);
     int bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
     int msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
     int mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
@@ -91,13 +103,14 @@ int main()
             pdata[i] = bdata[i];
         }
     }
-
+    if (consumer != -1)
+        up(consumer);
+    up(producer);
     if (bdataid == -1 || mutex == -1 || msgq_id == -1)
     {
         perror("Error in create");
         exit(-1);
     }
-    union Semun semun;
     semun.val = 1; /* initial value of the semaphore, Binary semaphore */
     if (semctl(mutex, 0, SETVAL, semun) == -1)
     {
