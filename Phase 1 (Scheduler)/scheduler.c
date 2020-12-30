@@ -13,8 +13,8 @@ void roundRobin(int quantum);
 int initShm(int id);
 int getShmValue(int shmid);
 
-void readProcessesData();
-void storeProcessData();
+Node *readProcessesData();
+Node *storeProcessData();
 int forkNewProcess(int id, int remainingTime);
 
 void resumeProcess(Node *processNode);
@@ -133,7 +133,7 @@ int forkNewProcess(int id, int remainingTime)
     return processPID;
 }
 
-void storeProcessData()
+Node *storeProcessData()
 {
     process p = *shm_proc_addr;
     printf("process ID=%d Arrived Time = %d\n", p.id, now);
@@ -150,10 +150,14 @@ void storeProcessData()
     insert(&head, &newNode);
 
     remainingProcesses++;
+
+    return newNode;
 }
 
-void readProcessesData()
+/* read new processes data and return poiter to the first one (if no new process returns NULL) */
+Node *readProcessesData()
 {
+    Node *newNode = NULL;
     struct msgbuf message;
     while (processIsComming)
     {
@@ -167,7 +171,10 @@ void readProcessesData()
             break;
         }
 
-        storeProcessData();
+        Node *tmpNode = storeProcessData();
+
+        if (newNode == NULL)
+            newNode = tmpNode;
 
         int sendValue = msgsnd(msqupid, &message, sizeof(message.mtext), !IPC_NOWAIT);
         if (sendValue == -1)
@@ -176,6 +183,7 @@ void readProcessesData()
         if (message.mtext == COMPLETE)
             break;
     }
+    return newNode;
 }
 
 void resumeProcess(Node *processNode)
