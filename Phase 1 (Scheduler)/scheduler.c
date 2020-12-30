@@ -22,6 +22,8 @@ void stopProcess(Node *processNode);
 void removeProcess(Node *processNode);
 void updateProcess(Node *processNode);
 
+void sortNewProcessesWithPriority(Node *processNode);
+
 int shmid, msqdownid, msqupid;
 process *shm_proc_addr;
 Node *head;
@@ -207,16 +209,18 @@ void resumeProcess(Node *processNode)
 
 void stopProcess(Node *processNode)
 {
+    if (!processNode)
+        return;
     processNode->PCB.processState = WAITING;
     kill(processNode->PCB.PID, SIGTSTP);
 }
 void removeProcess(Node *processNode)
 {
-    processNode = removeNodeWithID(&head, processNode->process.id);
-    if (processNode != NULL)
+    Node *deletedProcess = removeNodeWithID(&head, processNode->process.id);
+    if (deletedProcess != NULL)
     {
         // TODO : output the results
-        free(processNode);
+        free(deletedProcess);
         remainingProcesses--;
     }
 }
@@ -244,58 +248,38 @@ void updateProcess(Node *processNode)
 void highestPriorityFirst()
 {
     runningProcessNode = NULL;
-    int aProcessIsRunning = 0;
+    bool processIsRunning = 0;
     while (remainingProcesses || processIsComming)
     {
         now = getClk();
 
         Node *newNode = readProcessesData();
-        /*insert new nodes in a sorted way according to there pirorities*/
-        // if (newNode != NULL)
-        // {
 
-        //     //disjointing the new nodes form the linked list
-        //     if (head == newNode)
-        //     {
-        //         head = NULL;
-        //     }
-        //     else
-        //     {
-        //         Node *tmpNode = head;
+        sortNewProcessesWithPriority(newNode);
 
-        //         while (tmpNode->next != newNode)
-        //         {
-        //             tmpNode = tmpNode->next;
-        //         }
-        //         tmpNode->next = NULL;
-        //     }
-        //     //joining them in a sorted way
-        //     while (newNode)
-        //     {
-        //         Node *nextNode = newNode->next;
-        //         insertionSortWithPriority(&head, &newNode);
-        //         newNode = nextNode;
-        //     }
-        // }
-        if (remainingProcesses && aProcessIsRunning == 0)
+        if (remainingProcesses && processIsRunning == 0)
         {
-            runningProcessNode = head;
+            if (runningProcessNode == NULL)
+                runningProcessNode = head;
 
             resumeProcess(runningProcessNode);
-            aProcessIsRunning = 1;
+            processIsRunning = 1;
             printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
         }
+
         sleep(1);
         while (now == getClk())
             ;
-        if (aProcessIsRunning == 1)
+
+        if (processIsRunning == 1)
         {
             updateProcess(runningProcessNode);
             /*if the process terminated give the turn to the next node*/
             if (runningProcessNode->PCB.processState == TERMINATED)
             {
                 removeProcess(runningProcessNode);
-                aProcessIsRunning = 0;
+                runningProcessNode = NULL;
+                processIsRunning = 0;
             }
         }
     }
@@ -304,6 +288,7 @@ void shortestRemainingTimeNext() {}
 void roundRobin(int quantum)
 {
     runningProcessNode = NULL;
+    Node *lastRunningProcessNode = NULL;
     int currentQuantum = 0;
     while (remainingProcesses || processIsComming)
     {
@@ -313,12 +298,21 @@ void roundRobin(int quantum)
 
         if (remainingProcesses && currentQuantum <= 0)
         {
-            if (runningProcessNode == NULL)
+            lastRunningProcessNode = runningProcessNode;
+            // if runningProcess is at the end of the linked list run the first process
+            if (!runningProcessNode || !runningProcessNode->next)
                 runningProcessNode = head;
+            else
+                runningProcessNode = runningProcessNode->next;
 
-            resumeProcess(runningProcessNode);
+            if (runningProcessNode->PCB.processState == WAITING)
+            {
+                stopProcess(lastRunningProcessNode);
+                resumeProcess(runningProcessNode);
+                printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
+            }
+
             currentQuantum = quantum;
-            printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
         }
 
         sleep(1);
@@ -334,13 +328,9 @@ void roundRobin(int quantum)
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
                 removeProcess(runningProcessNode);
+                lastRunningProcessNode = runningProcessNode;
                 runningProcessNode = runningProcessNode->next;
                 currentQuantum = 0;
-            }
-            else if (currentQuantum <= 0)
-            {
-                stopProcess(runningProcessNode);
-                runningProcessNode = runningProcessNode->next;
             }
         }
     }
@@ -389,4 +379,33 @@ void processTerminatedHandler(int signum)
     }
 
     printf("process ID=%d terminated  Time = %d\n", runningProcessNode->process.id, now);
+}
+
+/*insert new nodes in a sorted way according to there pirorities*/
+void sortNewProcessesWithPriority(Node *processNode)
+{
+    if (processNode == NULL)
+        return;
+    //disjointing the new nodes form the linked list
+    if (head == processNode)
+    {
+        head = NULL;
+    }
+    else
+    {
+        Node *tmpNode = head;
+        // TODO : optimize this later
+        while (tmpNode->next != processNode)
+        {
+            tmpNode = tmpNode->next;
+        }
+        tmpNode->next = NULL;
+    }
+    //joining them in a sorted way
+    while (processNode)
+    {
+        Node *nextNode = processNode->next;
+        insertionSortWithPriority(&head, &processNode);
+        processNode = nextNode;
+    }
 }

@@ -115,3 +115,13 @@ Node *findNodeWithID(Node *head, int id)
     tmpNode = tmpNode->next;
   return tmpNode;
 }
+
+void printList(Node **head)
+{
+  Node *tmpNode = *head;
+  while (tmpNode != NULL)
+  {
+    printf("id = %d, p = %d\n", tmpNode->process.id, tmpNode->process.priority);
+    tmpNode = tmpNode->next;
+  }
+}
