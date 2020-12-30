@@ -241,7 +241,65 @@ void updateProcess(Node *processNode)
         processNode->PCB.processState = TERMINATED;
 }
 
-void highestPriorityFirst() {}
+void highestPriorityFirst()
+{
+    runningProcessNode = NULL;
+    int aProcessIsRunning = 0;
+    while (remainingProcesses || processIsComming)
+    {
+        now = getClk();
+
+        Node *newNode = readProcessesData();
+        /*insert new nodes in a sorted way according to there pirorities*/
+        // if (newNode != NULL)
+        // {
+
+        //     //disjointing the new nodes form the linked list
+        //     if (head == newNode)
+        //     {
+        //         head = NULL;
+        //     }
+        //     else
+        //     {
+        //         Node *tmpNode = head;
+
+        //         while (tmpNode->next != newNode)
+        //         {
+        //             tmpNode = tmpNode->next;
+        //         }
+        //         tmpNode->next = NULL;
+        //     }
+        //     //joining them in a sorted way
+        //     while (newNode)
+        //     {
+        //         Node *nextNode = newNode->next;
+        //         insertionSortWithPriority(&head, &newNode);
+        //         newNode = nextNode;
+        //     }
+        // }
+        if (remainingProcesses && aProcessIsRunning == 0)
+        {
+            runningProcessNode = head;
+
+            resumeProcess(runningProcessNode);
+            aProcessIsRunning = 1;
+            printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
+        }
+        sleep(1);
+        while (now == getClk())
+            ;
+        if (aProcessIsRunning == 1)
+        {
+            updateProcess(runningProcessNode);
+            /*if the process terminated give the turn to the next node*/
+            if (runningProcessNode->PCB.processState == TERMINATED)
+            {
+                removeProcess(runningProcessNode);
+                aProcessIsRunning = 0;
+            }
+        }
+    }
+}
 void shortestRemainingTimeNext() {}
 void roundRobin(int quantum)
 {
@@ -330,5 +388,5 @@ void processTerminatedHandler(int signum)
         runningProcessNode->PCB.executionTime = runningProcessNode->process.runningtime;
     }
 
-    printf("process ID=%d terminated\n", runningProcessNode->process.id);
+    printf("process ID=%d terminated  Time = %d\n", runningProcessNode->process.id, now);
 }
