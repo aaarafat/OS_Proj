@@ -62,23 +62,41 @@ int main()
 {
 
     int send_val, rec_val;
-    int bsize = 5;
+    int bsize = 0;
     int bdata[4];
     bdata[0] = bsize;
     bdata[1] = 0;    // current full entries
     bdata[2] = 0;    // add here
     bdata[3] = 0;    // remove from here
     int buff[bsize]; // buffer array itself
-    int bdataid = shmget(ftok("key", 300), sizeof(int) * 4, IPC_CREAT | 0644);
-    int bufferid = shmget(ftok("key", 301), sizeof(int) * bsize, IPC_CREAT | 0644);
+    int bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
     int msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
     int mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
-    if (bdataid == -1 || bufferid == -1 || mutex == -1 || msgq_id == -1)
+    int *pdata;
+    if (bdataid == -1)
+    {
+        printf("Enter buffer size : \n");
+        scanf("%d", &bsize);
+        bdata[0] = bsize;
+        bdataid = shmget(ftok("key", 300), sizeof(int) * 4, IPC_CREAT | 0644);
+        void *shmaddr1 = shmat(bdataid, (void *)0, 0);
+        if (*((int *)shmaddr1) == -1)
+        {
+            perror("Producer : Error in attach in writer");
+            exit(-1);
+        }
+        pdata = (int *)shmaddr1;
+        for (int i = 0; i < 4; i++)
+        {
+            pdata[i] = bdata[i];
+        }
+    }
+
+    if (bdataid == -1 || mutex == -1 || msgq_id == -1)
     {
         perror("Error in create");
         exit(-1);
     }
-
     union Semun semun;
     semun.val = 1; /* initial value of the semaphore, Binary semaphore */
     if (semctl(mutex, 0, SETVAL, semun) == -1)
@@ -91,14 +109,11 @@ int main()
     void *shmaddr1 = shmat(bdataid, (void *)0, 0);
     if (*((int *)shmaddr1) == -1)
     {
-        perror("Error in attach in writer");
+        perror("Producer : Error in attach in writer");
         exit(-1);
     }
-    int *pdata = (int *)shmaddr1;
-    for (int i = 0; i < 4; i++)
-    {
-        pdata[i] = bdata[i];
-    }
+    pdata = (int *)shmaddr1;
+    int bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
     void *shmaddr2 = shmat(bufferid, (void *)0, 0);
     if (*((int *)shmaddr2) == -1)
     {
@@ -106,10 +121,6 @@ int main()
         exit(-1);
     }
     int *pbuffer = (int *)shmaddr2;
-    for (int i = 0; i < bsize; i++)
-    {
-        pbuffer[i] = buff[i];
-    }
     ////////////////////// ================================= ////////////////////////////////
     ///////////////////// produce ///////////////////////////////////////////////////////////
     struct msgbuff message;

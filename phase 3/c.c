@@ -87,9 +87,18 @@ int main()
     signal(SIGINT, handler);
     union Semun semun;
     int rec_val, send_val;
+    int bsize = 0;
+    int bdata[4];
+    bdata[0] = bsize;
+    bdata[1] = 0;    // current full entries
+    bdata[2] = 0;    // add here
+    bdata[3] = 0;    // remove from here
+    int buff[bsize]; // buffer array itself
     bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
     msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
     mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
+
+    int *pdata;
     if (mutex == -1 || msgq_id == -1)
     {
         perror("Error in create");
@@ -97,12 +106,28 @@ int main()
     }
     if (bdataid == -1)
     {
-        printf("No buffer found\n");
-        cleanSegements(bdataid, bufferid, msgq_id, mutex);
-        exit(-1);
+        printf("Enter buffer size : \n");
+        scanf("%d", &bsize);
+        bdata[0] = bsize;
+        printf("init bdata[0] : %d \n", bdata[0]);
+        bdataid = shmget(ftok("key", 300), sizeof(int) * 4, IPC_CREAT | 0644);
+        void *shmaddr1 = shmat(bdataid, (void *)0, 0);
+        if (*((int *)shmaddr1) == -1)
+        {
+            perror("Consumer : Error in attach in writer");
+            exit(-1);
+        }
+        printf("Created shared memory \n");
+        pdata = (int *)shmaddr1;
+        for (int i = 0; i < 4; i++)
+        {
+            pdata[i] = bdata[i];
+        }
     }
     ////////////////////// wait and attach the shared memory ////////////////////////////////
     void *shmaddr = shmat(bdataid, (void *)0, 0);
+    printf("attached to shared memory \n");
+
     if (*((int *)shmaddr) == -1)
     {
         perror("Error in attach in data writer");
@@ -110,8 +135,8 @@ int main()
         exit(-1);
     }
 
-    int *pdata = (int *)shmaddr;
-    bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], 0644);
+    pdata = (int *)shmaddr;
+    bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
     void *shmaddr2 = shmat(bufferid, (void *)0, 0);
     if (*((int *)shmaddr2) == -1)
     {
@@ -135,16 +160,12 @@ int main()
         }
         else if (pdata[NUM] == 0) /* block if buffer empty */
         {
-            printf("\nnext step : wait for producer to send ");
-            scanf("%d", &i);
             up(mutex);
             rec_val = msgrcv(msgq_id, &message, sizeof(message.mtext), 2, !IPC_NOWAIT);
             if (rec_val == -1)
                 perror("Error in receive");
             down(mutex);
         }
-        printf("\nnext step : consume ");
-        scanf("%d", &i);
         /* if executing here, buffer not empty so remove element */
         i = pbuffer[pdata[REM]];
         pdata[REM] = (pdata[REM] + 1) % pdata[BSZ];
@@ -155,8 +176,6 @@ int main()
             char str[] = "produce";
             message.mtype = 1; /* arbitrary value */
             strcpy(message.mtext, str);
-            printf("\nnext step : send to producer ");
-            scanf("%d", &i);
             send_val = msgsnd(msgq_id, &message, sizeof(message.mtext), !IPC_NOWAIT);
             if (send_val == -1)
                 perror("Errror in send");
