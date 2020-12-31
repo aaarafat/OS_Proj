@@ -138,7 +138,7 @@ int forkNewProcess(int id, int remainingTime)
 Node *storeProcessData()
 {
     process p = *shm_proc_addr;
-    printf("process ID=%d Arrived Time = %d\n", p.id, now);
+    printf("process ID=%d Arrived Time = %d\n", p.id, getClk());
     Node *newNode = (Node *)malloc(sizeof(Node));
     // initialize newNode
     newNode->process = p;
@@ -328,8 +328,6 @@ void roundRobin(int quantum)
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
                 removeProcess(runningProcessNode);
-                lastRunningProcessNode = runningProcessNode;
-                runningProcessNode = runningProcessNode->next;
                 currentQuantum = 0;
             }
         }
@@ -378,7 +376,7 @@ void processTerminatedHandler(int signum)
         runningProcessNode->PCB.executionTime = runningProcessNode->process.runningtime;
     }
 
-    printf("process ID=%d terminated  Time = %d\n", runningProcessNode->process.id, now);
+    printf("process ID=%d terminated  Time = %d\n", runningProcessNode->process.id, getClk());
 }
 
 /*insert new nodes in a sorted way according to there pirorities*/
