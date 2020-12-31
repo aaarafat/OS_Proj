@@ -53,6 +53,29 @@ void insert(Node **head, Node **newNode)
   tmpNode->next = *newNode;
 }
 
+/*
+insert new Node in the linked list according to it's priorty 
+*/
+void insertionSortWithPriority(Node **head, Node **newNode)
+{
+  if (*head == NULL)
+  {
+    *head = *newNode;
+    return;
+  }
+  if ((*head)->process.priority > (*newNode)->process.priority)
+  {
+    (*newNode)->next = *head;
+    *head = *newNode;
+    return;
+  }
+  Node *tmpNode = *head;
+
+  while (tmpNode->next != NULL && (*newNode)->process.priority > tmpNode->next->process.priority)
+    tmpNode = tmpNode->next;
+  (*newNode)->next = tmpNode->next;
+  tmpNode->next = *newNode;
+}
 /* 
 remove a node from linkec list with the given id
 returns the removed Node 
@@ -91,4 +114,14 @@ Node *findNodeWithID(Node *head, int id)
   while (tmpNode != NULL && tmpNode->process.id != id)
     tmpNode = tmpNode->next;
   return tmpNode;
+}
+
+void printList(Node **head)
+{
+  Node *tmpNode = *head;
+  while (tmpNode != NULL)
+  {
+    printf("id = %d, p = %d\n", tmpNode->process.id, tmpNode->process.priority);
+    tmpNode = tmpNode->next;
+  }
 }
