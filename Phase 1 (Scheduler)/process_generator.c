@@ -1,12 +1,15 @@
 #include "headers.h"
 
+void initSem();
+
 void clearResources(int);
 void getAlgo(int *, int *, int, char **);
 void initProcesses(int *, int *, int, int);
 int getNumOfProcesses(FILE *);
 void readProcesses(FILE *, process *);
 
-int shmid, msqdownid, msqupid;
+int shmid, msqid;
+int sem_id_scheduler, sem_id_generator, sem_id_process;
 
 int main(int argc, char *argv[])
 {
@@ -32,6 +35,8 @@ int main(int argc, char *argv[])
     int schAlgo = NOT_SELECTED, quantum = 2; //in case of round robin: default value = 2
     getAlgo(&schAlgo, &quantum, argc, argv);
     // 3. Initiate and create the scheduler and clock processes.
+    /* Creating Semaphores */
+    initSem();
     int clkPID, schPID;
     initProcesses(&clkPID, &schPID, schAlgo, quantum);
     // 4. Use this function after creating the clock process to initialize clock
@@ -50,17 +55,10 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    msqdownid = msgget(PROC_MSQ_DOWN_KEY, IPC_CREAT | 0644);
-    if (msqdownid == -1)
+    msqid = msgget(PROC_MSQ_KEY, IPC_CREAT | 0644);
+    if (msqid == -1)
     {
-        perror("Error in create msqdownid");
-        exit(-1);
-    }
-
-    msqupid = msgget(PROC_MSQ_UP_KEY, IPC_CREAT | 0644);
-    if (msqupid == -1)
-    {
-        perror("Error in create msqupid");
+        perror("Error in create msqid");
         exit(-1);
     }
     struct msgbuf message;
@@ -68,30 +66,40 @@ int main(int argc, char *argv[])
     // Generation Main Loop
     while (currentProcess < n)
     {
+        down(sem_id_generator);
+        up(sem_id_scheduler);
         // 6. Send the information to the scheduler at the appropriate time.
-        if (parr[currentProcess].arrivaltime <= getClk())
+        int currClk = getClk();
+        if (parr[currentProcess].arrivaltime <= currClk)
         {
             *shmaddr = parr[currentProcess];
             currentProcess++;
             message.mtext = COMPLETE;
-            if (currentProcess < n && parr[currentProcess].arrivaltime <= getClk())
+            if (currentProcess < n && parr[currentProcess].arrivaltime <= currClk)
                 message.mtext = WAIT_FOR_NEXT_PROCESS;
 
-            int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
+            int sendValue = msgsnd(msqid, &message, sizeof(message.mtext), !IPC_NOWAIT);
             if (sendValue == -1)
                 perror("Error in send");
-
-            int recValue = msgrcv(msqupid, &message, sizeof(message.mtext), 0, !IPC_NOWAIT);
-            if (recValue == -1)
-                perror("Error in receive");
+        }
+        else
+        {
+            message.mtext = NO_PROCESSES;
+            int sendValue = msgsnd(msqid, &message, sizeof(message.mtext), !IPC_NOWAIT);
+            if (sendValue == -1)
+                perror("Error in send");
         }
     }
+    down(sem_id_generator);
+    up(sem_id_scheduler);
     message.mtext = FINISHED;
-    int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
+    int sendValue = msgsnd(msqid, &message, sizeof(message.mtext), !IPC_NOWAIT);
     if (sendValue == -1)
         perror("Error in send");
+
     while (true)
         ;
+
     // 7. Clear clock resources
     destroyClk(true);
 }
@@ -100,8 +108,10 @@ void clearResources(int signum)
 {
     //TODO Clears all resources in case of interruption
     shmctl(shmid, IPC_RMID, NULL);
-    msgctl(msqdownid, IPC_RMID, NULL);
-    msgctl(msqupid, IPC_RMID, NULL);
+    msgctl(msqid, IPC_RMID, NULL);
+    semctl(sem_id_scheduler, 1, IPC_RMID, (union Semun *)0);
+    semctl(sem_id_generator, 1, IPC_RMID, (union Semun *)0);
+    semctl(sem_id_process, 1, IPC_RMID, (union Semun *)0);
     printf("process generator terminating!\n");
     destroyClk(true); // ?? not sure
     exit(0);
@@ -220,5 +230,38 @@ void initProcesses(int *clkPID, int *schPID, int schAlgo, int quantum)
         perror("error in forking clk");
         destroyClk(true);
         exit(1);
+    }
+}
+
+/* Creating Semaphores */
+void initSem()
+{
+    /* Creating Semaphores */
+    key_t key_id_sem_scheduler = ftok("keyFile", 's');
+    key_t key_id_sem_generator = ftok("keyFile", 'g');
+    key_t key_id_sem_process = ftok("keyFile", 'p');
+
+    sem_id_scheduler = semget(key_id_sem_scheduler, 1, 0660 | IPC_CREAT);
+    sem_id_generator = semget(key_id_sem_generator, 1, 0660 | IPC_CREAT);
+    sem_id_process = semget(key_id_sem_process, 1, 0660 | IPC_CREAT);
+
+    union Semun semun;
+    semun.val = 0;
+    if (semctl(sem_id_scheduler, 0, SETVAL, semun) == -1)
+    {
+        perror("Error in semctl : process");
+        exit(-1);
+    }
+    semun.val = 1;
+    if (semctl(sem_id_generator, 0, SETVAL, semun) == -1)
+    {
+        perror("Error in semctl : process");
+        exit(-1);
+    }
+    semun.val = 0;
+    if (semctl(sem_id_process, 0, SETVAL, semun) == -1)
+    {
+        perror("Error in semctl : process");
+        exit(-1);
     }
 }

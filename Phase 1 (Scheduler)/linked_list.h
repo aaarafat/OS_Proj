@@ -27,6 +27,7 @@ struct NodeStruct
   process process;
   PCB PCB;
   struct NodeStruct *next;
+  struct NodeStruct *prev;
 };
 
 typedef struct NodeStruct Node;
@@ -51,6 +52,7 @@ void insert(Node **head, Node **newNode)
   while (tmpNode->next != NULL)
     tmpNode = tmpNode->next;
   tmpNode->next = *newNode;
+  (*newNode)->prev = tmpNode;
 }
 
 /*
@@ -66,15 +68,29 @@ void insertionSortWithPriority(Node **head, Node **newNode)
   if ((*head)->process.priority > (*newNode)->process.priority)
   {
     (*newNode)->next = *head;
+    (*head)->prev = *newNode;
     *head = *newNode;
     return;
   }
   Node *tmpNode = *head;
 
-  while (tmpNode->next != NULL && (*newNode)->process.priority > tmpNode->next->process.priority)
+  while (tmpNode->next && tmpNode->next->process.priority <= (*newNode)->process.priority)
     tmpNode = tmpNode->next;
-  (*newNode)->next = tmpNode->next;
-  tmpNode->next = *newNode;
+
+  Node *nxt = tmpNode->next;
+
+  if (nxt)
+  {
+    tmpNode->next = *newNode;
+    (*newNode)->prev = tmpNode;
+    (*newNode)->next = nxt;
+    nxt->prev = *newNode;
+  }
+  else
+  {
+    tmpNode->next = *newNode;
+    (*newNode)->prev = tmpNode;
+  }
 }
 /* 
 remove a node from linkec list with the given id
@@ -91,6 +107,8 @@ Node *removeNodeWithID(Node **head, int id)
   if ((*head)->process.id == id)
   {
     *head = (*head)->next;
+    if (*head != NULL)
+      (*head)->prev = NULL;
     return tmpNode;
   }
 
@@ -103,6 +121,7 @@ Node *removeNodeWithID(Node **head, int id)
   Node *removedNode = tmpNode->next;
 
   tmpNode->next = removedNode->next;
+  removedNode->prev = tmpNode;
 
   return removedNode;
 }
@@ -119,7 +138,7 @@ Node *findNodeWithID(Node *head, int id)
 void printList(Node **head)
 {
   Node *tmpNode = *head;
-  while (tmpNode != NULL)
+  while (tmpNode)
   {
     printf("id = %d, p = %d\n", tmpNode->process.id, tmpNode->process.priority);
     tmpNode = tmpNode->next;
