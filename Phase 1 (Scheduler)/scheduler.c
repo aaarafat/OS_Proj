@@ -22,7 +22,7 @@ int forkNewProcess(int id, int remainingTime);
 void resumeProcess(Node *processNode);
 void stopProcess(Node *processNode);
 void removeProcess(Node *processNode);
-void updateProcess(Node *processNode);
+void updateProcessTime(Node *processNode);
 
 void sortNewProcessesWithPriority(Node *processNode);
 
@@ -238,7 +238,8 @@ void removeProcess(Node *processNode)
     }
 }
 
-void updateProcess(Node *processNode)
+/* Update process remaining/execution/waiting time */
+void updateProcessTime(Node *processNode)
 {
     if (processNode->PCB.processState == TERMINATED)
         return;
@@ -285,7 +286,7 @@ void highestPriorityFirst()
 
         if (remainingProcesses)
         {
-            updateProcess(runningProcessNode);
+            updateProcessTime(runningProcessNode);
             /*if the process terminated give the turn to the next node*/
             if (runningProcessNode->PCB.processState == TERMINATED)
             {
@@ -335,7 +336,7 @@ void roundRobin(int quantum)
         {
             currentQuantum -= (getClk() - now);
 
-            updateProcess(runningProcessNode);
+            updateProcessTime(runningProcessNode);
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
