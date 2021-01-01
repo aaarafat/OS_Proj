@@ -1,16 +1,15 @@
 #include "headers.h"
 
 int perviousClock, currentClock, id, shmIdOfRemainingTime;
-
-/*signals handlers*/
-void stopHandler(int signum);
-void continueHandler(int signum);
+int sem_id_scheduler, sem_id_generator, sem_id_process;
 
 /*shared memory handlers*/
 int initShm(int id, int value);
 void setShmValue(int shmid, int value);
 int getShmValue(int shmid);
 void deleteShm(int shmid);
+
+void initSem();
 
 int main(int argc, char *argv[])
 {
@@ -25,53 +24,50 @@ int main(int argc, char *argv[])
     id = atoi(argv[1]);
     shmIdOfRemainingTime = initShm(id, runningTime);
 
+    initSem();
+
     //pervious and current clock to calculate the remaining time
     perviousClock = getClk();
     currentClock = getClk();
 
-    //attach handlers to used singals
-    signal(SIGTSTP, stopHandler);
-    signal(SIGCONT, continueHandler);
-
     int remainingTime = getShmValue(shmIdOfRemainingTime);
     while (remainingTime > 0)
     {
-        remainingTime = getShmValue(shmIdOfRemainingTime);
-        perviousClock = currentClock;
+        down(sem_id_process);
+        perviousClock = getClk();
+
+        while (perviousClock == getClk())
+            ;
+
         currentClock = getClk();
-
         // if one or more clocks passed decrease the remaining time
-        if (currentClock - perviousClock > 0)
-            setShmValue(remainingTime - (currentClock - perviousClock), shmIdOfRemainingTime);
-    }
+        remainingTime = remainingTime - (currentClock - perviousClock);
+        setShmValue(remainingTime, shmIdOfRemainingTime);
+        //printf("rem : %d\n", remainingTime);
 
+        up(sem_id_scheduler);
+    }
+    //printf("process id = %d finished\n", id);
     //send signal to parent on termination after finishing the remaining time
     kill(getppid(), SIGUSR1);
 
     deleteShm(shmIdOfRemainingTime);
     destroyClk(false);
-    exit(0);
+
+    exit(id);
 }
 
-/*SIGTSTP handler*/
-void stopHandler(int signum)
+/* Creating Semaphores */
+void initSem()
 {
-    /*it may happens that a new clock cycle will begin 
-    right before blocking  the process */
-    int remainingTime = getShmValue(shmIdOfRemainingTime);
-    if (currentClock - perviousClock > 0)
-        setShmValue(remainingTime - (currentClock - perviousClock), shmIdOfRemainingTime);
+    /* Creating Semaphores */
+    key_t key_id_sem_scheduler = ftok("keyFile", 's');
+    key_t key_id_sem_generator = ftok("keyFile", 'g');
+    key_t key_id_sem_process = ftok("keyFile", 'p');
 
-    //blocking the process
-    kill(getpid(), SIGSTOP);
-}
-
-/*SIGCONT handler*/
-void continueHandler(int signum)
-{
-    // reset the pervious and current clock
-    perviousClock = getClk();
-    currentClock = getClk();
+    sem_id_scheduler = semget(key_id_sem_scheduler, 1, 0660 | IPC_CREAT);
+    sem_id_generator = semget(key_id_sem_generator, 1, 0660 | IPC_CREAT);
+    sem_id_process = semget(key_id_sem_process, 1, 0660 | IPC_CREAT);
 }
 
 /*initlizer remainging time as a shared memory varible*/

@@ -24,7 +24,8 @@ void updateProcess(Node *processNode);
 
 void sortNewProcessesWithPriority(Node *processNode);
 
-int shmid, msqdownid, msqupid;
+int shmid, msqid;
+int sem_id_scheduler, sem_id_generator, sem_id_process;
 process *shm_proc_addr;
 Node *head;
 
@@ -44,7 +45,7 @@ int main(int argc, char *argv[])
 
     head = createLinkedList();
 
-    readProcessesData();
+    //readProcessesData();
 
     int schAlgo = atoi(argv[1]), quantum = atoi(argv[2]);
 
@@ -74,6 +75,14 @@ int main(int argc, char *argv[])
 
 void init()
 {
+    /* Creating Semaphores */
+    key_t key_id_sem_scheduler = ftok("keyFile", 's');
+    key_t key_id_sem_generator = ftok("keyFile", 'g');
+    key_t key_id_sem_process = ftok("keyFile", 'p');
+
+    sem_id_scheduler = semget(key_id_sem_scheduler, 1, 0660 | IPC_CREAT);
+    sem_id_generator = semget(key_id_sem_generator, 1, 0660 | IPC_CREAT);
+    sem_id_process = semget(key_id_sem_process, 1, 0660 | IPC_CREAT);
     /* Creating Shared Memory Segment */
     shmid = shmget(PROC_SH_KEY, sizeof(process), IPC_CREAT | 0644);
     if ((long)shmid == -1)
@@ -87,18 +96,10 @@ void init()
         perror("Error in attaching the shm in process generator!");
         exit(-1);
     }
-
-    msqdownid = msgget(PROC_MSQ_DOWN_KEY, IPC_CREAT | 0644);
-    if (msqdownid == -1)
+    msqid = msgget(PROC_MSQ_KEY, IPC_CREAT | 0644);
+    if (msqid == -1)
     {
-        perror("Error in create msqdownid");
-        exit(-1);
-    }
-
-    msqupid = msgget(PROC_MSQ_UP_KEY, IPC_CREAT | 0644);
-    if (msqupid == -1)
-    {
-        perror("Error in create msqupid");
+        perror("Error in create msqid");
         exit(-1);
     }
 
@@ -163,10 +164,11 @@ Node *readProcessesData()
     struct msgbuf message;
     while (processIsComming)
     {
-        int recValue = msgrcv(msqdownid, &message, sizeof(message.mtext), 0, !IPC_NOWAIT);
+        down(sem_id_scheduler);
+        int recValue = msgrcv(msqid, &message, sizeof(message.mtext), 0, !IPC_NOWAIT);
         if (recValue == -1)
             perror("Error in recieve");
-    
+
         if (message.mtext == FINISHED)
         {
             processIsComming = false;
@@ -175,28 +177,37 @@ Node *readProcessesData()
 
         if (message.mtext == NO_PROCESSES)
             break;
-    
+
         Node *tmpNode = storeProcessData();
 
         if (newNode == NULL)
             newNode = tmpNode;
 
-        int sendValue = msgsnd(msqupid, &message, sizeof(message.mtext), !IPC_NOWAIT);
-        if (sendValue == -1)
-            perror("Error in send");
-
         if (message.mtext == COMPLETE)
             break;
+
+        up(sem_id_generator);
     }
     return newNode;
 }
 
 void resumeProcess(Node *processNode)
 {
+    if (!processNode)
+        return;
+
+    if (processNode->PCB.processState == RUNNING)
+    {
+        up(sem_id_process);
+        down(sem_id_scheduler);
+        return;
+    }
+
     // set process state to running
     processNode->PCB.processState = RUNNING;
 
     // if this is the first time i run the process
+    up(sem_id_process);
     if (processNode->PCB.PID == -1)
     {
         processNode->PCB.PID = forkNewProcess(
@@ -204,11 +215,8 @@ void resumeProcess(Node *processNode)
             processNode->process.runningtime);
         processNode->PCB.shmid = initShm(processNode->process.id);
     }
-    else
-    {
-        // send signal to resume
-        kill(processNode->PCB.PID, SIGCONT);
-    }
+    printf("running process id = %d Time = %d\n", runningProcessNode->process.id, getClk());
+    down(sem_id_scheduler);
 }
 
 void stopProcess(Node *processNode)
@@ -216,12 +224,11 @@ void stopProcess(Node *processNode)
     if (!processNode)
         return;
     processNode->PCB.processState = WAITING;
-    kill(processNode->PCB.PID, SIGTSTP);
 }
 void removeProcess(Node *processNode)
 {
     Node *deletedProcess = removeNodeWithID(&head, processNode->process.id);
-    if (deletedProcess != NULL)
+    if (deletedProcess)
     {
         // TODO : output the results
         free(deletedProcess);
@@ -233,7 +240,7 @@ void updateProcess(Node *processNode)
 {
     if (processNode->PCB.processState == TERMINATED)
         return;
-        
+
     int remainingTime = getShmValue(processNode->PCB.shmid);
     int dif = processNode->PCB.remainingTime - remainingTime;
 
@@ -256,7 +263,6 @@ void highestPriorityFirst()
     while (remainingProcesses || processIsComming)
     {
         now = getClk();
-
         Node *newNode = readProcessesData();
 
         sortNewProcessesWithPriority(newNode);
@@ -266,16 +272,16 @@ void highestPriorityFirst()
             if (runningProcessNode == NULL)
                 runningProcessNode = head;
 
-            resumeProcess(runningProcessNode);
             processIsRunning = 1;
-            printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
         }
 
-        sleep(1);
+        resumeProcess(runningProcessNode);
+
+        //sleep(1);
         while (now == getClk())
             ;
 
-        if (processIsRunning == 1)
+        if (remainingProcesses)
         {
             updateProcess(runningProcessNode);
             /*if the process terminated give the turn to the next node*/
@@ -286,6 +292,7 @@ void highestPriorityFirst()
                 processIsRunning = 0;
             }
         }
+        up(sem_id_generator);
     }
 }
 void shortestRemainingTimeNext() {}
@@ -297,7 +304,6 @@ void roundRobin(int quantum)
     while (remainingProcesses || processIsComming)
     {
         now = getClk();
-
         readProcessesData();
 
         if (remainingProcesses && currentQuantum <= 0)
@@ -312,14 +318,14 @@ void roundRobin(int quantum)
             if (runningProcessNode->PCB.processState == WAITING)
             {
                 stopProcess(lastRunningProcessNode);
-                resumeProcess(runningProcessNode);
-                printf("running process id = %d Time = %d\n", runningProcessNode->process.id, now);
             }
 
             currentQuantum = quantum;
         }
 
-        sleep(1);
+        resumeProcess(runningProcessNode);
+
+        //sleep(1);
         while (now == getClk())
             ;
 
@@ -335,6 +341,7 @@ void roundRobin(int quantum)
                 currentQuantum = 0;
             }
         }
+        up(sem_id_generator);
     }
 }
 
@@ -373,14 +380,20 @@ int getShmValue(int shmid)
 
 void processTerminatedHandler(int signum)
 {
-    if (runningProcessNode)
+    int stat_loc, pid;
+    pid = wait(&stat_loc);
+    int id = stat_loc >> 8;
+    Node *terminatedProcess = findNodeWithID(head, id);
+
+    if (terminatedProcess)
     {
-        runningProcessNode->PCB.processState = TERMINATED;
-        runningProcessNode->PCB.remainingTime = 0;
-        runningProcessNode->PCB.executionTime = runningProcessNode->process.runningtime;
+        terminatedProcess->PCB.processState = TERMINATED;
+        terminatedProcess->PCB.remainingTime = 0;
+        terminatedProcess->PCB.executionTime = terminatedProcess->process.runningtime;
+        removeProcess(terminatedProcess);
     }
 
-    printf("process ID=%d terminated  Time = %d\n", runningProcessNode->process.id, getClk());
+    printf("process ID=%d terminated  Time = %d\n", id, getClk());
 }
 
 /*insert new nodes in a sorted way according to there pirorities*/
@@ -401,7 +414,9 @@ void sortNewProcessesWithPriority(Node *processNode)
     //joining them in a sorted way
     while (processNode)
     {
+        //printf("id = %d, p = %d\n", processNode->process.id, processNode->process.priority);
         Node *nextNode = processNode->next;
+        processNode->next = NULL;
         insertionSortWithPriority(&head, &processNode);
         processNode = nextNode;
     }

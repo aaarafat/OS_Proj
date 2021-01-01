@@ -74,11 +74,23 @@ void insertionSortWithPriority(Node **head, Node **newNode)
   }
   Node *tmpNode = *head;
 
-  while (tmpNode->next != NULL && (*newNode)->process.priority > tmpNode->next->process.priority)
+  while (tmpNode->next && tmpNode->next->process.priority <= (*newNode)->process.priority)
     tmpNode = tmpNode->next;
-  (*newNode)->next = tmpNode->next;
-  tmpNode->next = *newNode;
-  (*newNode)->prev = tmpNode;
+
+  Node *nxt = tmpNode->next;
+
+  if (nxt)
+  {
+    tmpNode->next = *newNode;
+    (*newNode)->prev = tmpNode;
+    (*newNode)->next = nxt;
+    nxt->prev = *newNode;
+  }
+  else
+  {
+    tmpNode->next = *newNode;
+    (*newNode)->prev = tmpNode;
+  }
 }
 /* 
 remove a node from linkec list with the given id
@@ -126,7 +138,7 @@ Node *findNodeWithID(Node *head, int id)
 void printList(Node **head)
 {
   Node *tmpNode = *head;
-  while (tmpNode != NULL)
+  while (tmpNode)
   {
     printf("id = %d, p = %d\n", tmpNode->process.id, tmpNode->process.priority);
     tmpNode = tmpNode->next;
