@@ -17,6 +17,7 @@ struct PCB_Struct
   int waitingTime;
   int PID;
   int shmid;
+  int semid;
 };
 
 typedef struct PCB_Struct PCB;

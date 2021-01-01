@@ -9,7 +9,7 @@ int getNumOfProcesses(FILE *);
 void readProcesses(FILE *, process *);
 
 int shmid, msqid;
-int sem_id_scheduler, sem_id_generator, sem_id_process;
+int sem_id_scheduler, sem_id_generator;
 
 int main(int argc, char *argv[])
 {
@@ -111,7 +111,6 @@ void clearResources(int signum)
     msgctl(msqid, IPC_RMID, NULL);
     semctl(sem_id_scheduler, 1, IPC_RMID, (union Semun *)0);
     semctl(sem_id_generator, 1, IPC_RMID, (union Semun *)0);
-    semctl(sem_id_process, 1, IPC_RMID, (union Semun *)0);
     printf("process generator terminating!\n");
     destroyClk(true); // ?? not sure
     exit(0);
@@ -239,11 +238,9 @@ void initSem()
     /* Creating Semaphores */
     key_t key_id_sem_scheduler = ftok("keyFile", 's');
     key_t key_id_sem_generator = ftok("keyFile", 'g');
-    key_t key_id_sem_process = ftok("keyFile", 'p');
 
     sem_id_scheduler = semget(key_id_sem_scheduler, 1, 0660 | IPC_CREAT);
     sem_id_generator = semget(key_id_sem_generator, 1, 0660 | IPC_CREAT);
-    sem_id_process = semget(key_id_sem_process, 1, 0660 | IPC_CREAT);
 
     union Semun semun;
     semun.val = 0;
@@ -254,12 +251,6 @@ void initSem()
     }
     semun.val = 1;
     if (semctl(sem_id_generator, 0, SETVAL, semun) == -1)
-    {
-        perror("Error in semctl : process");
-        exit(-1);
-    }
-    semun.val = 0;
-    if (semctl(sem_id_process, 0, SETVAL, semun) == -1)
     {
         perror("Error in semctl : process");
         exit(-1);

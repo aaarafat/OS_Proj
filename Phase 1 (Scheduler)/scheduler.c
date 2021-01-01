@@ -9,6 +9,8 @@ void shortestRemainingTimeNext();
 void roundRobin(int quantum);
 // ------------------------
 
+int initSem(int id);
+
 /*shared memory handlers*/
 int initShm(int id);
 int getShmValue(int shmid);
@@ -25,7 +27,7 @@ void updateProcess(Node *processNode);
 void sortNewProcessesWithPriority(Node *processNode);
 
 int shmid, msqid;
-int sem_id_scheduler, sem_id_generator, sem_id_process;
+int sem_id_scheduler, sem_id_generator;
 process *shm_proc_addr;
 Node *head;
 
@@ -78,11 +80,9 @@ void init()
     /* Creating Semaphores */
     key_t key_id_sem_scheduler = ftok("keyFile", 's');
     key_t key_id_sem_generator = ftok("keyFile", 'g');
-    key_t key_id_sem_process = ftok("keyFile", 'p');
 
     sem_id_scheduler = semget(key_id_sem_scheduler, 1, 0660 | IPC_CREAT);
     sem_id_generator = semget(key_id_sem_generator, 1, 0660 | IPC_CREAT);
-    sem_id_process = semget(key_id_sem_process, 1, 0660 | IPC_CREAT);
     /* Creating Shared Memory Segment */
     shmid = shmget(PROC_SH_KEY, sizeof(process), IPC_CREAT | 0644);
     if ((long)shmid == -1)
@@ -149,6 +149,7 @@ Node *storeProcessData()
     newNode->PCB.waitingTime = 0;
     newNode->PCB.PID = -1; // -1 means the process not created
     newNode->PCB.shmid = -1;
+    newNode->PCB.semid = -1;
     // insert new process to the linked list
     insert(&head, &newNode);
 
@@ -198,7 +199,7 @@ void resumeProcess(Node *processNode)
 
     if (processNode->PCB.processState == RUNNING)
     {
-        up(sem_id_process);
+        up(processNode->PCB.semid);
         down(sem_id_scheduler);
         return;
     }
@@ -207,14 +208,15 @@ void resumeProcess(Node *processNode)
     processNode->PCB.processState = RUNNING;
 
     // if this is the first time i run the process
-    up(sem_id_process);
     if (processNode->PCB.PID == -1)
     {
         processNode->PCB.PID = forkNewProcess(
             processNode->process.id,
             processNode->process.runningtime);
         processNode->PCB.shmid = initShm(processNode->process.id);
+        processNode->PCB.semid = initSem(processNode->process.id);
     }
+    up(processNode->PCB.semid);
     printf("running process id = %d Time = %d\n", runningProcessNode->process.id, getClk());
     down(sem_id_scheduler);
 }
@@ -343,6 +345,20 @@ void roundRobin(int quantum)
         }
         up(sem_id_generator);
     }
+}
+
+int initSem(int id)
+{
+    int semKey = ftok("keyFile", id);
+    int semid = semget(semKey, 1, 0660 | IPC_CREAT);
+    union Semun semun;
+    semun.val = 0;
+    if (semctl(semid, 0, SETVAL, semun) == -1)
+    {
+        perror("Error in semctl");
+        exit(-1);
+    }
+    return semid;
 }
 
 /*initlizer remainging time as a shared memory varible*/

@@ -9,7 +9,7 @@ void setShmValue(int shmid, int value);
 int getShmValue(int shmid);
 void deleteShm(int shmid);
 
-void initSem();
+void initSem(int id);
 
 int main(int argc, char *argv[])
 {
@@ -24,7 +24,7 @@ int main(int argc, char *argv[])
     id = atoi(argv[1]);
     shmIdOfRemainingTime = initShm(id, runningTime);
 
-    initSem();
+    initSem(id);
 
     //pervious and current clock to calculate the remaining time
     perviousClock = getClk();
@@ -52,22 +52,19 @@ int main(int argc, char *argv[])
     kill(getppid(), SIGUSR1);
 
     deleteShm(shmIdOfRemainingTime);
+    semctl(sem_id_process, 1, IPC_RMID, (union Semun *)0);
     destroyClk(false);
 
     exit(id);
 }
 
 /* Creating Semaphores */
-void initSem()
+void initSem(int id)
 {
-    /* Creating Semaphores */
+    int semKey = ftok("keyFile", id);
     key_t key_id_sem_scheduler = ftok("keyFile", 's');
-    key_t key_id_sem_generator = ftok("keyFile", 'g');
-    key_t key_id_sem_process = ftok("keyFile", 'p');
-
+    sem_id_process = semget(semKey, 1, 0660 | IPC_CREAT);
     sem_id_scheduler = semget(key_id_sem_scheduler, 1, 0660 | IPC_CREAT);
-    sem_id_generator = semget(key_id_sem_generator, 1, 0660 | IPC_CREAT);
-    sem_id_process = semget(key_id_sem_process, 1, 0660 | IPC_CREAT);
 }
 
 /*initlizer remainging time as a shared memory varible*/
