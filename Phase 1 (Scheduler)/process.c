@@ -45,11 +45,11 @@ int main(int argc, char *argv[])
             setShmValue(remainingTime - (currentClock - perviousClock), shmIdOfRemainingTime);
     }
 
-    deleteShm(shmIdOfRemainingTime);
-    destroyClk(false);
-
     //send signal to parent on termination after finishing the remaining time
     kill(getppid(), SIGUSR1);
+
+    deleteShm(shmIdOfRemainingTime);
+    destroyClk(false);
     exit(0);
 }
 

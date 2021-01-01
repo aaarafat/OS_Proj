@@ -391,13 +391,8 @@ void sortNewProcessesWithPriority(Node *processNode)
     }
     else
     {
-        Node *tmpNode = head;
-        // TODO : optimize this later
-        while (tmpNode->next != processNode)
-        {
-            tmpNode = tmpNode->next;
-        }
-        tmpNode->next = NULL;
+        processNode->prev->next = NULL;
+        processNode->prev = NULL;
     }
     //joining them in a sorted way
     while (processNode)
