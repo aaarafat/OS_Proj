@@ -147,7 +147,7 @@ Node *storeProcessData()
     newNode->PCB.remainingTime = p.runningtime;
     newNode->PCB.waitingTime = 0;
     newNode->PCB.PID = -1; // -1 means the process not created
-    newNode->PCB.shmid = initShm(p.id);
+    newNode->PCB.shmid = -1;
     // insert new process to the linked list
     insert(&head, &newNode);
 
@@ -163,16 +163,19 @@ Node *readProcessesData()
     struct msgbuf message;
     while (processIsComming)
     {
-        int recValue = msgrcv(msqdownid, &message, sizeof(message.mtext), 0, IPC_NOWAIT);
+        int recValue = msgrcv(msqdownid, &message, sizeof(message.mtext), 0, !IPC_NOWAIT);
         if (recValue == -1)
-            break;
-
+            perror("Error in recieve");
+    
         if (message.mtext == FINISHED)
         {
             processIsComming = false;
             break;
         }
 
+        if (message.mtext == NO_PROCESSES)
+            break;
+    
         Node *tmpNode = storeProcessData();
 
         if (newNode == NULL)
@@ -199,6 +202,7 @@ void resumeProcess(Node *processNode)
         processNode->PCB.PID = forkNewProcess(
             processNode->process.id,
             processNode->process.runningtime);
+        processNode->PCB.shmid = initShm(processNode->process.id);
     }
     else
     {
@@ -229,7 +233,7 @@ void updateProcess(Node *processNode)
 {
     if (processNode->PCB.processState == TERMINATED)
         return;
-
+        
     int remainingTime = getShmValue(processNode->PCB.shmid);
     int dif = processNode->PCB.remainingTime - remainingTime;
 

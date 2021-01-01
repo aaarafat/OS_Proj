@@ -64,17 +64,18 @@ int main(int argc, char *argv[])
         exit(-1);
     }
     struct msgbuf message;
-    int currentProcess = 0;
+    int currentProcess = 0, prevClk = -1;
     // Generation Main Loop
     while (currentProcess < n)
     {
         // 6. Send the information to the scheduler at the appropriate time.
-        if (parr[currentProcess].arrivaltime <= getClk())
+        int currClk = getClk();
+        if (parr[currentProcess].arrivaltime <= currClk)
         {
             *shmaddr = parr[currentProcess];
             currentProcess++;
             message.mtext = COMPLETE;
-            if (currentProcess < n && parr[currentProcess].arrivaltime <= getClk())
+            if (currentProcess < n && parr[currentProcess].arrivaltime <= currClk)
                 message.mtext = WAIT_FOR_NEXT_PROCESS;
 
             int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
@@ -84,6 +85,14 @@ int main(int argc, char *argv[])
             int recValue = msgrcv(msqupid, &message, sizeof(message.mtext), 0, !IPC_NOWAIT);
             if (recValue == -1)
                 perror("Error in receive");
+        }
+        else if(prevClk != currClk)
+        {
+            prevClk = currClk;
+            message.mtext = NO_PROCESSES;
+            int sendValue = msgsnd(msqdownid, &message, sizeof(message.mtext), !IPC_NOWAIT);
+            if (sendValue == -1)
+                perror("Error in send");
         }
     }
     message.mtext = FINISHED;

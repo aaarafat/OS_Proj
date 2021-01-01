@@ -95,5 +95,6 @@ enum GeneratorMessages
 {
     WAIT_FOR_NEXT_PROCESS,
     COMPLETE,
+    NO_PROCESSES,
     FINISHED
 };
