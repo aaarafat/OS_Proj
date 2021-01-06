@@ -19,7 +19,12 @@ Node *readProcessesData();
 Node *storeProcessData();
 int forkNewProcess(Node *processNode);
 
+/* memory functions */
 void allocateMemoryFor(Node *processNode);
+void insertMemory(int mem, int start, int end);
+void splitMemory(int mem);
+void allocateMemory(int mem);
+void printMem();
 
 void resumeProcess(Node *processNode);
 void stopProcess(Node *processNode);
@@ -114,9 +119,7 @@ void init()
     signal(SIGUSR1, processTerminatedHandler);
 
     // init memory
-    memoryBlocks[MEMORY_SIZE] = (memoryBlock *)malloc(sizeof(memoryBlock));
-    memoryBlocks[MEMORY_SIZE]->start = 0;
-    memoryBlocks[MEMORY_SIZE]->end = 1023;
+    insertMemory(MEMORY_SIZE, 0, 1023);
 }
 
 int forkNewProcess(Node *processNode)
@@ -124,8 +127,6 @@ int forkNewProcess(Node *processNode)
     int processPID = fork();
     if (processPID == 0)
     {
-        allocateMemoryFor(processNode);
-
         int id = processNode->process.id;
         int remainingTime = processNode->PCB.remainingTime;
         // convert args to char*
@@ -146,6 +147,7 @@ int forkNewProcess(Node *processNode)
         exit(1);
     }
 
+    allocateMemoryFor(processNode);
     return processPID;
 }
 
@@ -467,7 +469,6 @@ int Log2(int n)
 void allocateMemoryFor(Node *processNode)
 {
     int mem = Log2(processNode->process.memsize);
-    printf("%d\n", mem);
     if (memoryBlocks[mem])
     {
         allocateMemory(mem);
@@ -475,11 +476,8 @@ void allocateMemoryFor(Node *processNode)
     }
 
     int memIdx;
-    for (memIdx = mem + 1; memIdx <= MEMORY_SIZE; memIdx++)
-    {
-        if (memoryBlocks[memIdx])
-            break;
-    }
+    for (memIdx = mem + 1; memIdx <= MEMORY_SIZE && !memoryBlocks[memIdx]; memIdx++)
+        ;
 
     if (memIdx > MEMORY_SIZE)
     {
@@ -488,10 +486,7 @@ void allocateMemoryFor(Node *processNode)
     }
 
     while (memIdx != mem)
-    {
-        splitMemory(memIdx);
-        memIdx--;
-    }
+        splitMemory(memIdx--);
 
     allocateMemory(mem);
 }
@@ -500,10 +495,58 @@ void allocateMemory(int mem)
 {
     printf("allocated memory from %d to %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->end);
     memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
-    memoryBlocks[mem] = deletedMemoryBlock->next;
+    memoryBlocks[mem] = memoryBlocks[mem]->next;
     free(deletedMemoryBlock);
+    //printMem(mem);
 }
 
 void splitMemory(int mem)
 {
+    memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
+    memoryBlocks[mem] = memoryBlocks[mem]->next;
+    int mid = (deletedMemoryBlock->end - deletedMemoryBlock->start + 1) / 2;
+    insertMemory(mem - 1, deletedMemoryBlock->start, deletedMemoryBlock->start + mid - 1);
+    insertMemory(mem - 1, deletedMemoryBlock->start + mid, deletedMemoryBlock->end);
+    free(deletedMemoryBlock);
+}
+
+void insertMemory(int mem, int start, int end)
+{
+    //printf("inserted mem from %d to %d \n", start, end);
+    memoryBlock *memoryNode = (memoryBlock *)malloc(sizeof(memoryBlock));
+    memoryNode->start = start;
+    memoryNode->end = end;
+    memoryNode->next = NULL;
+
+    if (!memoryBlocks[mem])
+    {
+        memoryBlocks[mem] = memoryNode;
+        return;
+    }
+
+    memoryBlock *headMem = memoryBlocks[mem];
+
+    while (headMem->next && headMem->next->start < memoryNode->start)
+        headMem = headMem->next;
+
+    memoryBlock *nxt = headMem->next;
+    headMem->next = memoryNode;
+    memoryNode->next = nxt;
+}
+
+void printMem()
+{
+    for (size_t mem = 0; mem <= MEMORY_SIZE; mem++)
+    {
+        memoryBlock *headMem = memoryBlocks[mem];
+        if (!headMem)
+            continue;
+        printf("mem : %d   ", mem);
+        while (headMem)
+        {
+            printf("start : %d end : %d, ", headMem->start, headMem->end);
+            headMem = headMem->next;
+        }
+        printf("\n");
+    }
 }
