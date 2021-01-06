@@ -17,7 +17,9 @@ int getShmValue(int shmid);
 
 Node *readProcessesData();
 Node *storeProcessData();
-int forkNewProcess(int id, int remainingTime);
+int forkNewProcess(Node *processNode);
+
+void allocateMemoryFor(Node *processNode);
 
 void resumeProcess(Node *processNode);
 void stopProcess(Node *processNode);
@@ -117,11 +119,15 @@ void init()
     memoryBlocks[MEMORY_SIZE]->end = 1023;
 }
 
-int forkNewProcess(int id, int remainingTime)
+int forkNewProcess(Node *processNode)
 {
     int processPID = fork();
     if (processPID == 0)
     {
+        allocateMemoryFor(processNode);
+
+        int id = processNode->process.id;
+        int remainingTime = processNode->PCB.remainingTime;
         // convert args to char*
         char execStr1[MAX_DIGITS + 1];
         char execStr2[MAX_DIGITS + 1];
@@ -217,9 +223,7 @@ void resumeProcess(Node *processNode)
     // if this is the first time i run the process
     if (processNode->PCB.PID == -1)
     {
-        processNode->PCB.PID = forkNewProcess(
-            processNode->process.id,
-            processNode->process.runningtime);
+        processNode->PCB.PID = forkNewProcess(processNode);
         processNode->PCB.shmid = initShm(processNode->process.id);
         processNode->PCB.semid = initSem(processNode->process.id);
     }
@@ -444,4 +448,62 @@ void sortNewProcessesWithPriority(Node *processNode)
         insertionSortWithPriority(&head, &processNode);
         processNode = nextNode;
     }
+}
+
+// Calculates log2 of number.
+int Log2(int n)
+{
+    int res = 0;
+    n--;
+    while (n)
+    {
+        res++;
+        n >>= 1;
+    }
+    return res;
+}
+
+/* allocate memory for a process */
+void allocateMemoryFor(Node *processNode)
+{
+    int mem = Log2(processNode->process.memsize);
+    printf("%d\n", mem);
+    if (memoryBlocks[mem])
+    {
+        allocateMemory(mem);
+        return;
+    }
+
+    int memIdx;
+    for (memIdx = mem + 1; memIdx <= MEMORY_SIZE; memIdx++)
+    {
+        if (memoryBlocks[memIdx])
+            break;
+    }
+
+    if (memIdx > MEMORY_SIZE)
+    {
+        perror("You Don't have enough memory!!\n");
+        exit(1);
+    }
+
+    while (memIdx != mem)
+    {
+        splitMemory(memIdx);
+        memIdx--;
+    }
+
+    allocateMemory(mem);
+}
+
+void allocateMemory(int mem)
+{
+    printf("allocated memory from %d to %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->end);
+    memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
+    memoryBlocks[mem] = deletedMemoryBlock->next;
+    free(deletedMemoryBlock);
+}
+
+void splitMemory(int mem)
+{
 }
