@@ -2,6 +2,7 @@
 
 void init();
 void processTerminatedHandler(int signum);
+void clearResources(int signum);
 
 // --------ALgorithms------
 void highestPriorityFirst();
@@ -53,6 +54,8 @@ int main(int argc, char *argv[])
 {
     // initialize all
     init();
+
+    signal(SIGINT, clearResources);
 
     printf("scheduler starting...\n");
 
@@ -473,6 +476,9 @@ memoryBlock *allocateMemory(int mem)
     printf("allocated memory from %d to %d Time = %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->end, getClk());
     memoryBlock *allocatedMemoryBlock = memoryBlocks[mem];
     memoryBlocks[mem] = memoryBlocks[mem]->next;
+
+    //printMem();
+    allocatedMemoryBlock->next = NULL;
     return allocatedMemoryBlock;
 }
 
@@ -507,7 +513,7 @@ void insertMemory(int mem, memoryBlock *memBlock)
 
     if (memoryBlocks[mem]->start > memBlock->start)
     {
-        memoryBlock *nxt = memoryBlocks[mem]->next;
+        memoryBlock *nxt = memoryBlocks[mem];
         memoryBlocks[mem] = memBlock;
         memBlock->next = nxt;
     }
@@ -581,20 +587,22 @@ void deallocateMemory(Node *processNode)
         if (!memoryBlocks[mem] || !memoryBlocks[mem]->next)
             break;
 
-        //printMem();
         //printf("start %d  start %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->next->start);
         memoryBlock *headMem = memoryBlocks[mem];
         while (headMem && headMem->next)
         {
-            if (headMem->end == headMem->next->start)
+            if (headMem->end + 1 == headMem->next->start)
             {
                 // Todo : change this
-                int temp = headMem->start + headMem->next->end;
-                if (temp % 2 == 0)
+                int blockSize = headMem->next->end - headMem->start + 1;
+                if (headMem->start % blockSize == 0)
                 {
                     found = true;
                     memoryBlock *nxt = headMem->next;
                     headMem->next = nxt->next;
+
+                    //printf("st : %d  en : %d\n", headMem->start, nxt->end);
+
                     insertAndCreateMemory(mem + 1, headMem->start, nxt->end);
 
                     headMem->start = -1; // will be deleted
@@ -630,5 +638,21 @@ void deallocateMemory(Node *processNode)
         }
 
         mem++;
+    }
+
+    //printMem();
+}
+
+void clearResources(int signum)
+{
+    // remove memory
+    for (int i = 0; i <= MEMORY_SIZE; i++)
+    {
+        while (memoryBlocks[i])
+        {
+            memoryBlock *tmp = memoryBlocks[i];
+            memoryBlocks[i] = memoryBlocks[i]->next;
+            free(tmp);
+        }
     }
 }
