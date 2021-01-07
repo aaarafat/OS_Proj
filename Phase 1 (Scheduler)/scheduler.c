@@ -385,9 +385,8 @@ int getShmValue(int shmid)
 
     if ((long)shmaddr == -1)
     {
-        printf("Error in attaching the shm in process with id: %d\n", shmid);
-        perror("");
-        exit(-1);
+        // the shared memory removed then the process is deleted
+        return 0;
     }
     // deatach shared memory
     int value = *shmaddr;

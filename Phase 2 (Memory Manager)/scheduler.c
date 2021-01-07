@@ -21,9 +21,11 @@ int forkNewProcess(Node *processNode);
 
 /* memory functions */
 void allocateMemoryFor(Node *processNode);
-void insertMemory(int mem, int start, int end);
+void insertAndCreateMemory(int mem, int start, int end);
+void insertMemory(int mem, memoryBlock *memBlock);
 void splitMemory(int mem);
-void allocateMemory(int mem);
+memoryBlock *allocateMemory(int mem);
+void deallocateMemory(Node *processNode);
 void printMem();
 
 void resumeProcess(Node *processNode);
@@ -119,7 +121,7 @@ void init()
     signal(SIGUSR1, processTerminatedHandler);
 
     // init memory
-    insertMemory(MEMORY_SIZE, 0, 1023);
+    insertAndCreateMemory(MEMORY_SIZE, 0, 1023);
 }
 
 int forkNewProcess(Node *processNode)
@@ -165,6 +167,7 @@ Node *storeProcessData()
     newNode->PCB.PID = -1; // -1 means the process not created
     newNode->PCB.shmid = -1;
     newNode->PCB.semid = -1;
+    newNode->PCB.memBlock = NULL;
     // insert new process to the linked list
     insert(&head, &newNode);
 
@@ -246,6 +249,7 @@ void removeProcess(Node *processNode)
     if (deletedProcess)
     {
         // TODO : output the results
+        deallocateMemory(deletedProcess);
         free(deletedProcess);
         remainingProcesses--;
     }
@@ -398,9 +402,8 @@ int getShmValue(int shmid)
 
     if ((long)shmaddr == -1)
     {
-        printf("Error in attaching the shm in process with id: %d\n", shmid);
-        perror("");
-        exit(-1);
+        // the shared memory removed then the process is deleted
+        return 0;
     }
     // deatach shared memory
     int value = *shmaddr;
@@ -465,13 +468,84 @@ int Log2(int n)
     return res;
 }
 
+memoryBlock *allocateMemory(int mem)
+{
+    printf("allocated memory from %d to %d Time = %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->end, getClk());
+    memoryBlock *allocatedMemoryBlock = memoryBlocks[mem];
+    memoryBlocks[mem] = memoryBlocks[mem]->next;
+    return allocatedMemoryBlock;
+}
+
+void splitMemory(int mem)
+{
+    memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
+    memoryBlocks[mem] = memoryBlocks[mem]->next;
+    int mid = (deletedMemoryBlock->end - deletedMemoryBlock->start + 1) / 2;
+    insertAndCreateMemory(mem - 1, deletedMemoryBlock->start, deletedMemoryBlock->start + mid - 1);
+    insertAndCreateMemory(mem - 1, deletedMemoryBlock->start + mid, deletedMemoryBlock->end);
+    free(deletedMemoryBlock);
+}
+
+void insertAndCreateMemory(int mem, int start, int end)
+{
+    memoryBlock *memBlock = (memoryBlock *)malloc(sizeof(memoryBlock));
+    memBlock->start = start;
+    memBlock->end = end;
+    memBlock->next = NULL;
+
+    insertMemory(mem, memBlock);
+}
+
+void insertMemory(int mem, memoryBlock *memBlock)
+{
+    //printf("inserted mem from %d to %d \n", memBlock->start, memBlock->end);
+    if (!memoryBlocks[mem])
+    {
+        memoryBlocks[mem] = memBlock;
+        return;
+    }
+
+    if (memoryBlocks[mem]->start > memBlock->start)
+    {
+        memoryBlock *nxt = memoryBlocks[mem]->next;
+        memoryBlocks[mem] = memBlock;
+        memBlock->next = nxt;
+    }
+
+    memoryBlock *headMem = memoryBlocks[mem];
+
+    while (headMem->next && headMem->next->start < memBlock->start)
+        headMem = headMem->next;
+
+    memoryBlock *nxt = headMem->next;
+    headMem->next = memBlock;
+    memBlock->next = nxt;
+}
+
+void printMem()
+{
+    for (int mem = 0; mem <= MEMORY_SIZE; mem++)
+    {
+        memoryBlock *headMem = memoryBlocks[mem];
+        if (!headMem)
+            continue;
+        printf("mem : %d   ", mem);
+        while (headMem)
+        {
+            printf("start : %d end : %d, ", headMem->start, headMem->end);
+            headMem = headMem->next;
+        }
+        printf("\n");
+    }
+}
+
 /* allocate memory for a process */
 void allocateMemoryFor(Node *processNode)
 {
     int mem = Log2(processNode->process.memsize);
     if (memoryBlocks[mem])
     {
-        allocateMemory(mem);
+        processNode->PCB.memBlock = allocateMemory(mem);
         return;
     }
 
@@ -488,65 +562,73 @@ void allocateMemoryFor(Node *processNode)
     while (memIdx != mem)
         splitMemory(memIdx--);
 
-    allocateMemory(mem);
+    processNode->PCB.memBlock = allocateMemory(mem);
 }
 
-void allocateMemory(int mem)
+void deallocateMemory(Node *processNode)
 {
-    printf("allocated memory from %d to %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->end);
-    memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
-    memoryBlocks[mem] = memoryBlocks[mem]->next;
-    free(deletedMemoryBlock);
-    //printMem(mem);
-}
+    memoryBlock *memBlock = processNode->PCB.memBlock;
+    int mem = Log2(memBlock->end - memBlock->start);
+    insertMemory(mem, memBlock);
 
-void splitMemory(int mem)
-{
-    memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
-    memoryBlocks[mem] = memoryBlocks[mem]->next;
-    int mid = (deletedMemoryBlock->end - deletedMemoryBlock->start + 1) / 2;
-    insertMemory(mem - 1, deletedMemoryBlock->start, deletedMemoryBlock->start + mid - 1);
-    insertMemory(mem - 1, deletedMemoryBlock->start + mid, deletedMemoryBlock->end);
-    free(deletedMemoryBlock);
-}
+    printf("freed memory from %d to %d Time = %d\n", memBlock->start, memBlock->end, getClk());
 
-void insertMemory(int mem, int start, int end)
-{
-    //printf("inserted mem from %d to %d \n", start, end);
-    memoryBlock *memoryNode = (memoryBlock *)malloc(sizeof(memoryBlock));
-    memoryNode->start = start;
-    memoryNode->end = end;
-    memoryNode->next = NULL;
-
-    if (!memoryBlocks[mem])
+    bool found = true;
+    while (found)
     {
-        memoryBlocks[mem] = memoryNode;
-        return;
-    }
+        found = false;
 
-    memoryBlock *headMem = memoryBlocks[mem];
+        if (!memoryBlocks[mem] || !memoryBlocks[mem]->next)
+            break;
 
-    while (headMem->next && headMem->next->start < memoryNode->start)
-        headMem = headMem->next;
-
-    memoryBlock *nxt = headMem->next;
-    headMem->next = memoryNode;
-    memoryNode->next = nxt;
-}
-
-void printMem()
-{
-    for (size_t mem = 0; mem <= MEMORY_SIZE; mem++)
-    {
+        //printMem();
+        //printf("start %d  start %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->next->start);
         memoryBlock *headMem = memoryBlocks[mem];
-        if (!headMem)
-            continue;
-        printf("mem : %d   ", mem);
-        while (headMem)
+        while (headMem && headMem->next)
         {
-            printf("start : %d end : %d, ", headMem->start, headMem->end);
+            if (headMem->end == headMem->next->start)
+            {
+                // Todo : change this
+                int temp = headMem->start + headMem->next->end;
+                if (temp % 2 == 0)
+                {
+                    found = true;
+                    memoryBlock *nxt = headMem->next;
+                    headMem->next = nxt->next;
+                    insertAndCreateMemory(mem + 1, headMem->start, nxt->end);
+
+                    headMem->start = -1; // will be deleted
+
+                    free(nxt);
+                }
+            }
             headMem = headMem->next;
         }
-        printf("\n");
+
+        if (!found)
+            break;
+
+        // now delete temp memBlocks
+        while (memoryBlocks[mem] && memoryBlocks[mem]->start == -1)
+        {
+            // remove it and skip
+            memoryBlock *temp = memoryBlocks[mem];
+            memoryBlocks[mem] = memoryBlocks[mem]->next;
+            free(temp);
+        }
+
+        headMem = memoryBlocks[mem];
+        while (headMem && headMem->next)
+        {
+            if (headMem->next->start == -1)
+            {
+                memoryBlock *temp = headMem->next;
+                headMem->next = temp->next;
+                free(temp);
+            }
+            headMem = headMem->next;
+        }
+
+        mem++;
     }
 }

@@ -18,6 +18,7 @@ struct PCB_Struct
   int PID;
   int shmid;
   int semid;
+  struct memoryBlockStruct *memBlock;
 };
 
 typedef struct PCB_Struct PCB;
