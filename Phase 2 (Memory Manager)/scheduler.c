@@ -298,7 +298,8 @@ void highestPriorityFirst()
             processIsRunning = 1;
         }
 
-        resumeProcess(runningProcessNode);
+        if (remainingProcesses)
+            resumeProcess(runningProcessNode);
 
         //sleep(1);
         while (now == getClk())
@@ -332,6 +333,7 @@ void roundRobin(int quantum)
         if (remainingProcesses && currentQuantum <= 0)
         {
             lastRunningProcessNode = runningProcessNode;
+
             // if runningProcess is at the end of the linked list run the first process
             if (!runningProcessNode || !runningProcessNode->next)
                 runningProcessNode = head;
@@ -346,7 +348,8 @@ void roundRobin(int quantum)
             currentQuantum = quantum;
         }
 
-        resumeProcess(runningProcessNode);
+        if (remainingProcesses)
+            resumeProcess(runningProcessNode);
 
         //sleep(1);
         while (now == getClk())

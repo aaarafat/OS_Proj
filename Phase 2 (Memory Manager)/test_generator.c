@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
         pData.runningtime = rand() % (30);
         pData.priority = rand() % (11);
         pData.priority = rand() % (11);
-        pData.memsize = 200;
+        pData.memsize = rand() % 256 + 1;
         fprintf(pFile, "%d\t%d\t%d\t%d\t%d\n", pData.id, pData.arrivaltime, pData.runningtime, pData.priority, pData.memsize);
     }
     fclose(pFile);
