@@ -25,6 +25,7 @@ void removeProcess(Node *processNode);
 void updateProcessTime(Node *processNode);
 
 void sortNewProcessesWithPriority(Node *processNode);
+void sortNewProcessesWithRemainingTime(Node *processNode);
 
 int shmid, msqid;
 int sem_id_scheduler, sem_id_generator;
@@ -299,7 +300,48 @@ void highestPriorityFirst()
         up(sem_id_generator);
     }
 }
-void shortestRemainingTimeNext() {}
+void shortestRemainingTimeNext() 
+{
+    Node *lastRunningProcessNode = NULL;
+    runningProcessNode = NULL;
+    while (remainingProcesses || processIsComming)
+    {
+        now = getClk();
+        Node *newNode = readProcessesData();
+        sortNewProcessesWithRemainingTime(newNode);
+
+        if (remainingProcesses && newNode)
+        {
+            lastRunningProcessNode = runningProcessNode;
+            if (runningProcessNode == NULL)
+                runningProcessNode = head;
+            else if (head && head->PCB.remainingTime < runningProcessNode->PCB.remainingTime)
+            {
+                stopProcess(lastRunningProcessNode);
+                runningProcessNode = head;
+            }
+        }
+
+        if (remainingProcesses)
+            resumeProcess(runningProcessNode);
+
+        //sleep(1);
+        while (now == getClk())
+            ;
+
+        if (remainingProcesses)
+        {
+            updateProcessTime(runningProcessNode);
+
+            if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
+            {
+                removeProcess(runningProcessNode);
+                runningProcessNode = head;
+            }
+        }
+        up(sem_id_generator);
+    }
+}
 void roundRobin(int quantum)
 {
     runningProcessNode = NULL;
@@ -436,6 +478,31 @@ void sortNewProcessesWithPriority(Node *processNode)
         Node *nextNode = processNode->next;
         processNode->next = NULL;
         insertionSortWithPriority(&head, &processNode);
+        processNode = nextNode;
+    }
+}
+
+/*insert new nodes in a sorted way according to there remainging time*/
+void sortNewProcessesWithRemainingTime(Node *processNode)
+{
+    if (processNode == NULL)
+        return;
+    //disjointing the new nodes form the linked list
+    if (head == processNode)
+    {
+        head = NULL;
+    }
+    else
+    {
+        processNode->prev->next = NULL;
+        processNode->prev = NULL;
+    }
+    //joining them in a sorted way
+    while (processNode)
+    {
+        Node *nextNode = processNode->next;
+        processNode->next = NULL;
+        insertionSortWithRemainingTime(&head, &processNode);
         processNode = nextNode;
     }
 }

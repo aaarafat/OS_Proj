@@ -93,6 +93,44 @@ void insertionSortWithPriority(Node **head, Node **newNode)
     (*newNode)->prev = tmpNode;
   }
 }
+
+/*
+insert new Node in the linked list according to it's remaining time 
+*/
+void insertionSortWithRemainingTime(Node **head, Node **newNode)
+{
+  if (*head == NULL)
+  {
+    *head = *newNode;
+    return;
+  }
+  if ((*head)->PCB.remainingTime > (*newNode)->PCB.remainingTime)
+  {
+    (*newNode)->next = *head;
+    (*head)->prev = *newNode;
+    *head = *newNode;
+    return;
+  }
+  Node *tmpNode = *head;
+
+  while (tmpNode->next && tmpNode->next->PCB.remainingTime <= (*newNode)->PCB.remainingTime)
+    tmpNode = tmpNode->next;
+
+  Node *nxt = tmpNode->next;
+
+  if (nxt)
+  {
+    tmpNode->next = *newNode;
+    (*newNode)->prev = tmpNode;
+    (*newNode)->next = nxt;
+    nxt->prev = *newNode;
+  }
+  else
+  {
+    tmpNode->next = *newNode;
+    (*newNode)->prev = tmpNode;
+  }
+}
 /* 
 remove a node from linkec list with the given id
 returns the removed Node 
