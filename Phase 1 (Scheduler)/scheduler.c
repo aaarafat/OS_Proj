@@ -1,5 +1,5 @@
 #include "linked_list.h"
-
+#include "vector.h"
 void init();
 void processTerminatedHandler(int signum);
 
@@ -27,10 +27,15 @@ void updateProcessTime(Node *processNode);
 void sortNewProcessesWithPriority(Node *processNode);
 void sortNewProcessesWithRemainingTime(Node *processNode);
 
+void outputPref();
+
 int shmid, msqid;
 int sem_id_scheduler, sem_id_generator;
 process *shm_proc_addr;
 Node *head;
+
+//output files
+FILE *logFile, *prefFIle;
 
 int remainingProcesses = 0;
 bool processIsComming = true;
@@ -38,7 +43,10 @@ bool processIsComming = true;
 Node *runningProcessNode;
 
 int now; // current clock
-
+//varabiles for pref file
+vec *WTAs; //store all WTA of all processes
+int TotalRunningTimes, TotalWaitings;
+float TotalWTA;
 int main(int argc, char *argv[])
 {
     // initialize all
@@ -72,12 +80,21 @@ int main(int argc, char *argv[])
     //Switch between two processes according to the scheduling algorithm. (Stop the old process and save its state and start/resume another one.)
     //Keep a process control block (PCB) for each process in the system.
     //Delete the data of a process when it gets noties that it nished.
+    fclose(logFile);
+    outputPref();
     printf("scheduler terminates...\n");
     destroyClk(true);
 }
 
 void init()
 {
+    //initialize varabiles for pref file
+    WTAs = initVec();
+    TotalRunningTimes = 0;
+    TotalWaitings = 0;
+    TotalWTA = 0;
+    //open log file to write
+    logFile = fopen("scheduler.log", "w");
     /* Creating Semaphores */
     key_t key_id_sem_scheduler = ftok("keyFile", 's');
     key_t key_id_sem_generator = ftok("keyFile", 'g');
@@ -207,15 +224,29 @@ void resumeProcess(Node *processNode)
 
     // set process state to running
     processNode->PCB.processState = RUNNING;
+    int arrivalTime = processNode->process.arrivaltime;
+    int executionTime = processNode->PCB.executionTime;
 
+    processNode->PCB.waitingTime = getClk() - arrivalTime - executionTime;
     // if this is the first time i run the process
     if (processNode->PCB.PID == -1)
     {
+        //print to log file
+        fprintf(logFile, "At Time %d process %d started arr %d total %d remain %d wait %d\n", now, processNode->process.id,
+                processNode->process.arrivaltime, processNode->process.runningtime,
+                processNode->PCB.remainingTime, processNode->PCB.waitingTime);
+
         processNode->PCB.PID = forkNewProcess(
             processNode->process.id,
             processNode->process.runningtime);
         processNode->PCB.shmid = initShm(processNode->process.id);
         processNode->PCB.semid = initSem(processNode->process.id);
+    }
+    else
+    {
+        fprintf(logFile, "At Time %d process %d resumed arr %d total %d remain %d wait %d\n", now, processNode->process.id,
+                processNode->process.arrivaltime, processNode->process.runningtime,
+                processNode->PCB.remainingTime, processNode->PCB.waitingTime);
     }
     up(processNode->PCB.semid);
     printf("running process id = %d Time = %d\n", runningProcessNode->process.id, getClk());
@@ -224,8 +255,11 @@ void resumeProcess(Node *processNode)
 
 void stopProcess(Node *processNode)
 {
-    if (!processNode)
+    if (!processNode || processNode->PCB.processState == TERMINATED)
         return;
+    fprintf(logFile, "At Time %d process %d stopped arr %d total %d remain %d wait %d\n", now, processNode->process.id,
+            processNode->process.arrivaltime, processNode->process.runningtime,
+            processNode->PCB.remainingTime, processNode->PCB.waitingTime);
     processNode->PCB.processState = WAITING;
 }
 void removeProcess(Node *processNode)
@@ -233,8 +267,17 @@ void removeProcess(Node *processNode)
     Node *deletedProcess = removeNodeWithID(&head, processNode->process.id);
     if (deletedProcess)
     {
-        // TODO : output the results
+        int TA = now - processNode->process.arrivaltime;
+        float WTA = TA / (1.0 * processNode->process.runningtime);
+        vec_push_back(WTAs, WTA);
+        TotalWTA += WTA;
+        TotalRunningTimes += processNode->process.runningtime;
+        TotalWaitings += processNode->PCB.waitingTime;
+        fprintf(logFile, "At Time %d process %d finished arr %d total %d remain %d wait %d TA %d WTA %.2f\n", now, processNode->process.id,
+                processNode->process.arrivaltime, processNode->process.runningtime,
+                processNode->PCB.remainingTime, processNode->PCB.waitingTime, TA, WTA);
         free(deletedProcess);
+
         remainingProcesses--;
     }
 }
@@ -300,7 +343,7 @@ void highestPriorityFirst()
         up(sem_id_generator);
     }
 }
-void shortestRemainingTimeNext() 
+void shortestRemainingTimeNext()
 {
     Node *lastRunningProcessNode = NULL;
     runningProcessNode = NULL;
@@ -505,4 +548,22 @@ void sortNewProcessesWithRemainingTime(Node *processNode)
         insertionSortWithRemainingTime(&head, &processNode);
         processNode = nextNode;
     }
+}
+void outputPref()
+{
+    prefFIle = fopen("scheduler.perf", "w");
+    // printf("totalrunningtimes = %d now =    %d", TotalRunningTimes, now);
+    //TODO : print correct CPU utilization
+    fprintf(prefFIle, "CPU utilization= %d%%\n", TotalRunningTimes * 100 / now);
+    int numberOfProcesses = vec_length(WTAs);
+    float AvgWTA = 1.0 * TotalWTA / numberOfProcesses;
+    fprintf(prefFIle, "Avg WTA= %.2f\n", AvgWTA);
+
+    fprintf(prefFIle, "Avg Waiting = %.2f\n", 1.0 * TotalWaitings / numberOfProcesses);
+    float STDWTA = 0;
+    for (int i = 0; i < numberOfProcesses; i++)
+        STDWTA += pow(vec_get(WTAs, i) - AvgWTA, 2);
+    STDWTA = sqrt(STDWTA / numberOfProcesses);
+    fprintf(prefFIle, "Std WTA = %.2f\n", STDWTA);
+    fclose(prefFIle);
 }
