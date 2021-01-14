@@ -54,6 +54,7 @@ void insert(Node **head, Node **newNode)
     tmpNode = tmpNode->next;
   tmpNode->next = *newNode;
   (*newNode)->prev = tmpNode;
+  (*newNode)->next = NULL;
 }
 
 /*

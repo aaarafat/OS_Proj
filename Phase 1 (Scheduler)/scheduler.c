@@ -1,5 +1,7 @@
 #include "linked_list.h"
 #include "vector.h"
+#include <math.h>
+
 void init();
 void processTerminatedHandler(int signum);
 
@@ -335,7 +337,6 @@ void highestPriorityFirst()
             /*if the process terminated give the turn to the next node*/
             if (runningProcessNode->PCB.processState == TERMINATED)
             {
-                removeProcess(runningProcessNode);
                 runningProcessNode = NULL;
                 processIsRunning = 0;
             }
@@ -378,7 +379,6 @@ void shortestRemainingTimeNext()
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
-                removeProcess(runningProcessNode);
                 runningProcessNode = head;
             }
         }
@@ -427,7 +427,6 @@ void roundRobin(int quantum)
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
-                removeProcess(runningProcessNode);
                 currentQuantum = 0;
             }
         }
