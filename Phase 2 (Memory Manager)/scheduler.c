@@ -1,5 +1,6 @@
 #include "linked_list.h"
-
+#include "vector.h"
+#include <math.h>
 void init();
 void processTerminatedHandler(int signum);
 void clearResources(int signum);
@@ -37,6 +38,8 @@ void updateProcessTime(Node *processNode);
 void sortNewProcessesWithPriority(Node *processNode);
 void sortNewProcessesWithRemainingTime(Node *processNode);
 
+void outputPref();
+
 int shmid, msqid;
 int sem_id_scheduler, sem_id_generator;
 process *shm_proc_addr;
@@ -44,6 +47,8 @@ Node *head;
 
 int remainingProcesses = 0;
 bool processIsComming = true;
+//output files
+FILE *logFile, *prefFIle;
 
 Node *runningProcessNode;
 
@@ -51,6 +56,10 @@ int now;         // current clock
 FILE *memoryLog; //output file
 
 memoryBlock *memoryBlocks[MEMORY_SIZE + 1];
+//varabiles for pref file
+vec *WTAs; //store all WTA of all processes
+int TotalRunningTimes, TotalWaitings;
+float TotalWTA;
 
 int main(int argc, char *argv[])
 {
@@ -87,6 +96,8 @@ int main(int argc, char *argv[])
     //Switch between two processes according to the scheduling algorithm. (Stop the old process and save its state and start/resume another one.)
     //Keep a process control block (PCB) for each process in the system.
     //Delete the data of a process when it gets noties that it nished.
+    fclose(logFile);
+    outputPref();
     fclose(memoryLog);
     printf("scheduler terminates...\n");
     destroyClk(true);
@@ -94,7 +105,15 @@ int main(int argc, char *argv[])
 
 void init()
 {
-    //open log file to write
+    //initialize varabiles for pref file
+    WTAs = initVec();
+    TotalRunningTimes = 0;
+    TotalWaitings = 0;
+    TotalWTA = 0;
+    //open scheduler log file to write
+    logFile = fopen("scheduler.log", "w");
+    fprintf(logFile, "#At Time\tx\tprocess\tY\tstate arr\tw\ttotal\tz\tremain\ty\twait\tk\n");
+    //open memory log file to write
     memoryLog = fopen("memory.log", "w");
 
     fprintf(memoryLog, "#At time\tx\tallocated\ty\tbytes for process\tz\tfrom\ti\tto\tj\n");
@@ -238,9 +257,22 @@ void resumeProcess(Node *processNode)
     // if this is the first time i run the process
     if (processNode->PCB.PID == -1)
     {
+        //print to log file
+        processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
+        fprintf(logFile, "At Time\t%d\tprocess\t%d\tstarted arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
+                processNode->process.arrivaltime, processNode->process.runningtime,
+                processNode->PCB.remainingTime, processNode->PCB.waitingTime);
+
         processNode->PCB.PID = forkNewProcess(processNode);
         processNode->PCB.shmid = initShm(processNode->process.id);
         processNode->PCB.semid = initSem(processNode->process.id);
+    }
+    else
+    {
+        processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
+        fprintf(logFile, "At Time\t%d\tprocess\t%d\tresumed arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
+                processNode->process.arrivaltime, processNode->process.runningtime,
+                processNode->PCB.remainingTime, processNode->PCB.waitingTime);
     }
     up(processNode->PCB.semid);
     printf("running process id = %d Time = %d\n", runningProcessNode->process.id, getClk());
@@ -251,6 +283,10 @@ void stopProcess(Node *processNode)
 {
     if (!processNode)
         return;
+    processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
+    fprintf(logFile, "At Time\t%d\tprocess\t%d\tstopped arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
+            processNode->process.arrivaltime, processNode->process.runningtime,
+            processNode->PCB.remainingTime, processNode->PCB.waitingTime);
     processNode->PCB.processState = WAITING;
 }
 void removeProcess(Node *processNode)
@@ -258,7 +294,18 @@ void removeProcess(Node *processNode)
     Node *deletedProcess = removeNodeWithID(&head, processNode->process.id);
     if (deletedProcess)
     {
-        // TODO : output the results
+        int TA = getClk() - processNode->process.arrivaltime;
+        float WTA = TA / (1.0 * processNode->process.runningtime);
+        vec_push_back(WTAs, WTA);
+        TotalWTA += WTA;
+
+        TotalRunningTimes += processNode->process.runningtime;
+        processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
+        TotalWaitings += processNode->PCB.waitingTime;
+
+        fprintf(logFile, "At Time\t%d\tprocess\t%d\tfinished arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\tTA\t%d\tWTA\t%.2f\n", getClk(), processNode->process.id,
+                processNode->process.arrivaltime, processNode->process.runningtime,
+                processNode->PCB.remainingTime, processNode->PCB.waitingTime, TA, WTA);
         deallocateMemory(deletedProcess);
         free(deletedProcess);
         remainingProcesses--;
@@ -342,6 +389,7 @@ void shortestRemainingTimeNext()
                 runningProcessNode = head;
             else if (head && head->PCB.remainingTime < runningProcessNode->PCB.remainingTime)
             {
+
                 stopProcess(lastRunningProcessNode);
                 runningProcessNode = head;
             }
@@ -731,4 +779,21 @@ void clearResources(int signum)
             free(tmp);
         }
     }
+}
+void outputPref()
+{
+    prefFIle = fopen("scheduler.perf", "w");
+    // printf("totalrunningtimes = %d now =    %d", TotalRunningTimes, now);
+    fprintf(prefFIle, "CPU utilization= %d%%\n", TotalRunningTimes * 100 / now);
+    int numberOfProcesses = vec_length(WTAs);
+    float AvgWTA = 1.0 * TotalWTA / numberOfProcesses;
+    fprintf(prefFIle, "Avg WTA= %.2f\n", AvgWTA);
+
+    fprintf(prefFIle, "Avg Waiting = %.2f\n", 1.0 * TotalWaitings / numberOfProcesses);
+    float STDWTA = 0;
+    for (int i = 0; i < numberOfProcesses; i++)
+        STDWTA += pow(vec_get(WTAs, i) - AvgWTA, 2);
+    STDWTA = sqrt(STDWTA / numberOfProcesses);
+    fprintf(prefFIle, "Std WTA = %.2f\n", STDWTA);
+    fclose(prefFIle);
 }

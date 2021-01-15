@@ -235,6 +235,7 @@ void resumeProcess(Node *processNode)
     if (processNode->PCB.PID == -1)
     {
         //print to log file
+        processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
         fprintf(logFile, "At Time\t%d\tprocess\t%d\tstarted arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
                 processNode->process.arrivaltime, processNode->process.runningtime,
                 processNode->PCB.remainingTime, processNode->PCB.waitingTime);
@@ -247,6 +248,7 @@ void resumeProcess(Node *processNode)
     }
     else
     {
+        processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
         fprintf(logFile, "At Time\t%d\tprocess\t%d\tresumed arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
                 processNode->process.arrivaltime, processNode->process.runningtime,
                 processNode->PCB.remainingTime, processNode->PCB.waitingTime);
@@ -260,6 +262,7 @@ void stopProcess(Node *processNode)
 {
     if (!processNode || processNode->PCB.processState == TERMINATED)
         return;
+    processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
     fprintf(logFile, "At Time\t%d\tprocess\t%d\tstopped arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
             processNode->process.arrivaltime, processNode->process.runningtime,
             processNode->PCB.remainingTime, processNode->PCB.waitingTime);
@@ -275,6 +278,7 @@ void removeProcess(Node *processNode)
         vec_push_back(WTAs, WTA);
         TotalWTA += WTA;
         TotalRunningTimes += processNode->process.runningtime;
+        processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
         TotalWaitings += processNode->PCB.waitingTime;
         fprintf(logFile, "At Time\t%d\tprocess\t%d\tfinished arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\tTA\t%d\tWTA\t%.2f\n", getClk(), processNode->process.id,
                 processNode->process.arrivaltime, processNode->process.runningtime,
