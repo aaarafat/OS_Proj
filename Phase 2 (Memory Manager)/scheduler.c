@@ -28,6 +28,7 @@ void insertMemory(int mem, memoryBlock *memBlock);
 void splitMemory(int mem);
 memoryBlock *allocateMemory(int mem);
 void deallocateMemory(Node *processNode);
+bool isMemoryAvailableFor(Node *processNode);
 void printMem();
 
 void resumeProcess(Node *processNode);
@@ -281,7 +282,7 @@ void resumeProcess(Node *processNode)
 
 void stopProcess(Node *processNode)
 {
-    if (!processNode)
+    if (!processNode || processNode->PCB.processState == TERMINATED)
         return;
     processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
     fprintf(logFile, "At Time\t%d\tprocess\t%d\tstopped arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\n", getClk(), processNode->process.id,
@@ -798,4 +799,18 @@ void outputPref()
     STDWTA = sqrt(STDWTA / numberOfProcesses);
     fprintf(prefFIle, "Std WTA = %.2f\n", STDWTA);
     fclose(prefFIle);
+}
+
+bool isMemoryAvailableFor(Node *processNode)
+{
+    int mem = Log2(processNode->process.memsize);
+
+    int memIdx;
+    for (memIdx = mem; memIdx <= MEMORY_SIZE && !memoryBlocks[memIdx]; memIdx++)
+        ;
+
+    if (memIdx > MEMORY_SIZE)
+        return 0;
+
+    return 1;
 }
