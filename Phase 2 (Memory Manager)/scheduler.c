@@ -319,7 +319,7 @@ void highestPriorityFirst()
         up(sem_id_generator);
     }
 }
-void shortestRemainingTimeNext() 
+void shortestRemainingTimeNext()
 {
     Node *lastRunningProcessNode = NULL;
     runningProcessNode = NULL;
@@ -354,7 +354,6 @@ void shortestRemainingTimeNext()
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
-                removeProcess(runningProcessNode);
                 runningProcessNode = head;
             }
         }
