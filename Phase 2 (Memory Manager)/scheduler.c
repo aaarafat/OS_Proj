@@ -47,7 +47,8 @@ bool processIsComming = true;
 
 Node *runningProcessNode;
 
-int now; // current clock
+int now;         // current clock
+FILE *memoryLog; //output file
 
 memoryBlock *memoryBlocks[MEMORY_SIZE + 1];
 
@@ -86,12 +87,17 @@ int main(int argc, char *argv[])
     //Switch between two processes according to the scheduling algorithm. (Stop the old process and save its state and start/resume another one.)
     //Keep a process control block (PCB) for each process in the system.
     //Delete the data of a process when it gets noties that it nished.
+    fclose(memoryLog);
     printf("scheduler terminates...\n");
     destroyClk(true);
 }
 
 void init()
 {
+    //open log file to write
+    memoryLog = fopen("memory.log", "w");
+
+    fprintf(memoryLog, "#At time\tx\tallocated\ty\tbytes for process\tz\tfrom\ti\tto\tj\n");
     /* Creating Semaphores */
     key_t key_id_sem_scheduler = ftok("keyFile", 's');
     key_t key_id_sem_generator = ftok("keyFile", 'g');
@@ -525,7 +531,6 @@ void sortNewProcessesWithRemainingTime(Node *processNode)
     }
 }
 
-
 // Calculates log2 of number.
 int Log2(int n)
 {
@@ -619,6 +624,8 @@ void allocateMemoryFor(Node *processNode)
     int mem = Log2(processNode->process.memsize);
     if (memoryBlocks[mem])
     {
+        fprintf(memoryLog, "At time\t%d\tallocated\t%d\tbytes for process\t%d\tfrom\t%d\tto\t%d\n", getClk(), memoryBlocks[mem]->end - memoryBlocks[mem]->start,
+                processNode->process.id, memoryBlocks[mem]->start, memoryBlocks[mem]->end);
         processNode->PCB.memBlock = allocateMemory(mem);
         return;
     }
@@ -646,7 +653,8 @@ void deallocateMemory(Node *processNode)
     insertMemory(mem, memBlock);
 
     printf("freed memory from %d to %d Time = %d\n", memBlock->start, memBlock->end, getClk());
-
+    fprintf(memoryLog, "At time\t%d\tfreed\t%d\tbytes from process\t%d\tfrom\t%d\tto\t%d\n", getClk(), memBlock->end - memBlock->start,
+            processNode->process.id, memBlock->start, memBlock->end);
     bool found = true;
     while (found)
     {
