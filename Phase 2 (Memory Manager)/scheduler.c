@@ -624,7 +624,7 @@ void allocateMemoryFor(Node *processNode)
     int mem = Log2(processNode->process.memsize);
     if (memoryBlocks[mem])
     {
-        fprintf(memoryLog, "At time\t%d\tallocated\t%d\tbytes for process\t%d\tfrom\t%d\tto\t%d\n", getClk(), memoryBlocks[mem]->end - memoryBlocks[mem]->start,
+        fprintf(memoryLog, "At time\t%d\tallocated\t%d\tbytes for process\t%d\tfrom\t%d\tto\t%d\n", getClk(), processNode->process.memsize,
                 processNode->process.id, memoryBlocks[mem]->start, memoryBlocks[mem]->end);
         processNode->PCB.memBlock = allocateMemory(mem);
         return;
@@ -643,6 +643,8 @@ void allocateMemoryFor(Node *processNode)
     while (memIdx != mem)
         splitMemory(memIdx--);
 
+    fprintf(memoryLog, "At time\t%d\tallocated\t%d\tbytes for process\t%d\tfrom\t%d\tto\t%d\n", getClk(), processNode->process.memsize,
+            processNode->process.id, memoryBlocks[mem]->start, memoryBlocks[mem]->end);
     processNode->PCB.memBlock = allocateMemory(mem);
 }
 
@@ -653,7 +655,7 @@ void deallocateMemory(Node *processNode)
     insertMemory(mem, memBlock);
 
     printf("freed memory from %d to %d Time = %d\n", memBlock->start, memBlock->end, getClk());
-    fprintf(memoryLog, "At time\t%d\tfreed\t%d\tbytes from process\t%d\tfrom\t%d\tto\t%d\n", getClk(), memBlock->end - memBlock->start,
+    fprintf(memoryLog, "At time\t%d\tfreed\t%d\tbytes from process\t%d\tfrom\t%d\tto\t%d\n", getClk(), processNode->process.memsize,
             processNode->process.id, memBlock->start, memBlock->end);
     bool found = true;
     while (found)
