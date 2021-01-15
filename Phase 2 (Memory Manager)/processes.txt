@@ -1,3 +1,7 @@
 #id arrival runtime priority memsize
 1	1	6	5	200
+<<<<<<< HEAD
 2	3	3	3	200
+=======
+2	3	3	3	170
+>>>>>>> 66c9182a6a52f993d36a6b472288bfd1cbe58e66
