@@ -312,7 +312,6 @@ void highestPriorityFirst()
             /*if the process terminated give the turn to the next node*/
             if (runningProcessNode->PCB.processState == TERMINATED)
             {
-                removeProcess(runningProcessNode);
                 runningProcessNode = NULL;
                 processIsRunning = 0;
             }
@@ -405,7 +404,6 @@ void roundRobin(int quantum)
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
-                removeProcess(runningProcessNode);
                 currentQuantum = 0;
             }
         }
