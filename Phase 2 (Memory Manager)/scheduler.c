@@ -186,6 +186,10 @@ int forkNewProcess(Node *processNode)
 Node *storeProcessData()
 {
     process p = *shm_proc_addr;
+
+    if (p.runningtime <= 0)
+        return NULL;
+
     printf("process ID=%d Arrived Time = %d\n", p.id, getClk());
     Node *newNode = (Node *)malloc(sizeof(Node));
     // initialize newNode
