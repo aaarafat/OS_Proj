@@ -62,6 +62,7 @@ int main(int argc, char *argv[])
         exit(-1);
     }
     struct msgbuf message;
+    message.mtype = 1;
     int currentProcess = 0;
     // Generation Main Loop
     while (currentProcess < n)
