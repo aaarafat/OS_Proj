@@ -806,10 +806,10 @@ void outputPref()
 {
     prefFIle = fopen("scheduler.perf", "w");
     // printf("totalrunningtimes = %d now =    %d", TotalRunningTimes, now);
-    fprintf(prefFIle, "CPU utilization= %d%%\n", TotalRunningTimes * 100 / now);
+    fprintf(prefFIle, "CPU utilization = %d%%\n", TotalRunningTimes * 100 / now);
     int numberOfProcesses = vec_length(WTAs);
     float AvgWTA = 1.0 * TotalWTA / numberOfProcesses;
-    fprintf(prefFIle, "Avg WTA= %.2f\n", AvgWTA);
+    fprintf(prefFIle, "Avg WTA = %.2f\n", AvgWTA);
 
     fprintf(prefFIle, "Avg Waiting = %.2f\n", 1.0 * TotalWaitings / numberOfProcesses);
     float STDWTA = 0;
