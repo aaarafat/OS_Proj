@@ -370,6 +370,7 @@ void highestPriorityFirst()
             /*if the process terminated give the turn to the next node*/
             if (runningProcessNode->PCB.processState == TERMINATED)
             {
+                removeProcess(runningProcessNode);
                 runningProcessNode = NULL;
                 processIsRunning = 0;
             }
@@ -421,6 +422,7 @@ void shortestRemainingTimeNext()
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
+                removeProcess(runningProcessNode);
                 runningProcessNode = head;
             }
         }
@@ -477,6 +479,7 @@ void roundRobin(int quantum)
 
             if (runningProcessNode && runningProcessNode->PCB.processState == TERMINATED)
             {
+                removeProcess(runningProcessNode);
                 currentQuantum = 0;
             }
         }
@@ -535,16 +538,6 @@ void processTerminatedHandler(int signum)
     int stat_loc, pid;
     pid = wait(&stat_loc);
     int id = stat_loc >> 8;
-    Node *terminatedProcess = findNodeWithID(head, id);
-
-    if (terminatedProcess)
-    {
-        terminatedProcess->PCB.processState = TERMINATED;
-        terminatedProcess->PCB.remainingTime = 0;
-        terminatedProcess->PCB.executionTime = terminatedProcess->process.runningtime;
-        removeProcess(terminatedProcess);
-    }
-
     printf("process ID=%d terminated  Time = %d\n", id, getClk());
 }
 
