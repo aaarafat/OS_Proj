@@ -435,6 +435,9 @@ void roundRobin(int quantum)
             else
                 runningProcessNode = runningProcessNode->next;
 
+            if (!isMemoryAvailableFor(runningProcessNode))
+                runningProcessNode = head;
+
             if (runningProcessNode->PCB.processState == WAITING)
             {
                 stopProcess(lastRunningProcessNode);
@@ -803,6 +806,12 @@ void outputPref()
 
 bool isMemoryAvailableFor(Node *processNode)
 {
+    if (processNode == NULL)
+        return 0;
+
+    if (processNode->PCB.PID != -1)
+        return 1;
+
     int mem = Log2(processNode->process.memsize);
 
     int memIdx;
