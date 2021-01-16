@@ -28,23 +28,39 @@ union Semun
     struct seminfo *__buf; /* buffer for IPC_INFO */
     void *__pad;
 };
-void cleanSegements(int bdataid, int bufferid, int msgq_id, int mutex)
+void cleanSegements(int bufferid)
 {
-    if (bdataid != -1)
+    if (shmget(ftok("key.k", 300), sizeof(int) * 4, 0644) != -1)
     {
-        shmctl(bdataid, IPC_RMID, (struct shmid_ds *)0);
+        shmctl(shmget(ftok("key.k", 300), sizeof(int) * 4, 0644), IPC_RMID, (struct shmid_ds *)0);
     }
     if (bufferid != -1)
     {
         shmctl(bufferid, IPC_RMID, (struct shmid_ds *)0);
     }
-    if (msgq_id != -1)
+    if (msgget(ftok("key.k", 302), 0666) != -1)
     {
-        msgctl(msgq_id, IPC_RMID, (struct msqid_ds *)0);
+        msgctl(msgget(ftok("key.k", 302), 0666), IPC_RMID, (struct msqid_ds *)0);
     }
-    if (mutex != -1)
+    if (semget(ftok("key.k", 303), 1, 0666) != -1)
     {
-        semctl(mutex, 0, IPC_RMID);
+        semctl(semget(ftok("key.k", 303), 1, 0666), 0, IPC_RMID);
+    }
+    if (semget(ftok("key.k", 102), 1, 0666) != -1)
+    {
+        semctl(semget(ftok("key.k", 102), 1, 0666), 0, IPC_RMID);
+    }
+    if (semget(ftok("key.k", 101), 1, 0666) != -1)
+    {
+        semctl(semget(ftok("key.k", 101), 1, 0666), 0, IPC_RMID);
+    }
+    if (semget(ftok("key.k", 702), 1, 0666) != -1)
+    {
+        semctl(semget(ftok("key.k", 702), 1, 0666), 0, IPC_RMID);
+    }
+    if (semget(ftok("key.k", 701), 1, 0666) != -1)
+    {
+        semctl(semget(ftok("key.k", 701), 1, 0666), 0, IPC_RMID);
     }
 }
 void down(int sem)
@@ -76,10 +92,10 @@ void up(int sem)
         exit(-1);
     }
 }
-int bdataid = -1, bufferid = -1, msgq_id = -1, mutex = -1;
+int bdataid = -1, bufferid = -1, mutex = -1, consumer = -1, producer = -1, full, empty;
 void handler(int signum)
 {
-    cleanSegements(bdataid, bufferid, msgq_id, mutex);
+    cleanSegements(bufferid);
     killpg(getpgrp(), SIGKILL);
 }
 int main()
@@ -87,81 +103,116 @@ int main()
     signal(SIGINT, handler);
     union Semun semun;
     int rec_val, send_val;
-    bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
-    msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
-    mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
-    if (mutex == -1 || msgq_id == -1)
+    int bsize = 0;
+    int bdata[4];
+    bdata[0] = bsize;
+    bdata[1] = 0;    // current full entries
+    bdata[2] = 0;    // add here
+    bdata[3] = 0;    // remove from here
+    int buff[bsize]; // buffer array itself
+    consumer = semget(ftok("key.k", 102), 1, 0666);
+    full = semget(ftok("key.k", 701), 1, 0666 | IPC_CREAT);
+    empty = semget(ftok("key.k", 702), 1, 0666 | IPC_CREAT);
+    if (consumer == -1) // if this is the first consumer to run then intialize the semph
+    {
+        consumer = semget(ftok("key.k", 102), 1, 0666 | IPC_CREAT);
+        semun.val = 1; /* initial value of the semaphore, Binary semaphore */
+        if (semctl(consumer, 0, SETVAL, semun) == -1)
+        {
+
+            perror("Error in semctl");
+            cleanSegements(bufferid);
+            exit(-1);
+        }
+    }
+    producer = semget(ftok("key.k", 101), 1, 0666);
+    down(consumer);
+    if (producer != -1)
+    {
+        down(producer);
+    }
+    bdataid = shmget(ftok("key.k", 300), sizeof(int) * 4, 0644);
+    mutex = semget(ftok("key.k", 303), 1, 0666 | IPC_CREAT);
+    int *pdata;
+    if (mutex == -1)
     {
         perror("Error in create");
+        cleanSegements(bufferid);
         exit(-1);
     }
     if (bdataid == -1)
     {
-        printf("No buffer found\n");
-        cleanSegements(bdataid, bufferid, msgq_id, mutex);
-        exit(-1);
+        printf("Enter buffer size : \n");
+        scanf("%d", &bsize);
+        bdata[0] = bsize;
+        bdataid = shmget(ftok("key.k", 300), sizeof(int) * 4, IPC_CREAT | 0644);
+
+        semun.val = bsize;
+        if (semctl(empty, 0, SETVAL, semun) == -1)
+        {
+
+            perror("Error in semctl");
+            cleanSegements(bufferid);
+            exit(-1);
+        }
+        semun.val = 0;
+        if (semctl(full, 0, SETVAL, semun) == -1)
+        {
+
+            perror("Error in semctl");
+            cleanSegements(bufferid);
+            exit(-1);
+        }
+
+        void *shmaddr1 = shmat(bdataid, (void *)0, 0);
+        if (*((int *)shmaddr1) == -1)
+        {
+            perror("Consumer : Error in attach in writer");
+            cleanSegements(bufferid);
+            exit(-1);
+        }
+        pdata = (int *)shmaddr1;
+        for (int i = 0; i < 4; i++)
+        {
+            pdata[i] = bdata[i];
+        }
     }
+    if (producer != -1)
+        up(producer);
+    up(consumer);
     ////////////////////// wait and attach the shared memory ////////////////////////////////
     void *shmaddr = shmat(bdataid, (void *)0, 0);
     if (*((int *)shmaddr) == -1)
     {
         perror("Error in attach in data writer");
-        cleanSegements(bdataid, bufferid, msgq_id, mutex);
+        cleanSegements(bufferid);
         exit(-1);
     }
 
-    int *pdata = (int *)shmaddr;
-    bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], 0644);
+    pdata = (int *)shmaddr;
+    bufferid = shmget(ftok("key.k", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
     void *shmaddr2 = shmat(bufferid, (void *)0, 0);
     if (*((int *)shmaddr2) == -1)
     {
         perror("Error in attach in buffer writer");
-        cleanSegements(bdataid, bufferid, msgq_id, mutex);
+        cleanSegements(bufferid);
         exit(-1);
     }
     int *pbuffer = (int *)shmaddr2;
     ////////////////////// ================================= ////////////////////////////////
-    printf("Consumer is attached to the shared memory\n");
-    struct msgbuff message;
     int i;
     while (1)
     {
-        rec_val = msgrcv(msgq_id, &message, sizeof(message.mtext), 2, IPC_NOWAIT); // clear buffer
+        down(full);
         down(mutex);
-        if (pdata[NUM] < 0)
-        {
-            exit(1); /* underflow */
-            cleanSegements(bdataid, bufferid, msgq_id, mutex);
-        }
-        else if (pdata[NUM] == 0) /* block if buffer empty */
-        {
-            printf("\nnext step : wait for producer to send ");
-            scanf("%d", &i);
-            up(mutex);
-            rec_val = msgrcv(msgq_id, &message, sizeof(message.mtext), 2, !IPC_NOWAIT);
-            if (rec_val == -1)
-                perror("Error in receive");
-            down(mutex);
-        }
-        printf("\nnext step : consume ");
-        scanf("%d", &i);
         /* if executing here, buffer not empty so remove element */
         i = pbuffer[pdata[REM]];
         pdata[REM] = (pdata[REM] + 1) % pdata[BSZ];
         pdata[NUM]--;
         printf("Consume value %d\n", i);
-        if (pdata[NUM] == pdata[BSZ] - 1) /* buffer was full */
-        {
-            char str[] = "produce";
-            message.mtype = 1; /* arbitrary value */
-            strcpy(message.mtext, str);
-            printf("\nnext step : send to producer ");
-            scanf("%d", &i);
-            send_val = msgsnd(msgq_id, &message, sizeof(message.mtext), !IPC_NOWAIT);
-            if (send_val == -1)
-                perror("Errror in send");
-        }
+        //sleep(3); /*uncomment to make the consumer sleep after consuming*/
         up(mutex);
+        up(empty);
     }
 
     return 0;
