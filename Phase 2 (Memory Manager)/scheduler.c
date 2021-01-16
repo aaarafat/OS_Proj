@@ -1,9 +1,9 @@
 #include "linked_list.h"
 #include "vector.h"
 #include <math.h>
-
 void init();
 void processTerminatedHandler(int signum);
+void clearResources(int signum);
 
 // --------ALgorithms------
 void highestPriorityFirst();
@@ -19,7 +19,17 @@ int getShmValue(int shmid);
 
 Node *readProcessesData();
 Node *storeProcessData();
-int forkNewProcess(int id, int remainingTime);
+int forkNewProcess(Node *processNode);
+
+/* memory functions */
+void allocateMemoryFor(Node *processNode);
+void insertAndCreateMemory(int mem, int start, int end);
+void insertMemory(int mem, memoryBlock *memBlock);
+void splitMemory(int mem);
+memoryBlock *allocateMemory(int mem);
+void deallocateMemory(Node *processNode);
+bool isMemoryAvailableFor(Node *processNode);
+void printMem();
 
 void resumeProcess(Node *processNode);
 void stopProcess(Node *processNode);
@@ -36,23 +46,28 @@ int sem_id_scheduler, sem_id_generator;
 process *shm_proc_addr;
 Node *head;
 
+int remainingProcesses = 0;
+bool processIsComming = true;
 //output files
 FILE *logFile, *prefFIle;
 
-int remainingProcesses = 0;
-bool processIsComming = true;
-
 Node *runningProcessNode;
 
-int now; // current clock
+int now;         // current clock
+FILE *memoryLog; //output file
+
+memoryBlock *memoryBlocks[MEMORY_SIZE + 1];
 //varabiles for pref file
 vec *WTAs; //store all WTA of all processes
 int TotalRunningTimes, TotalWaitings;
 float TotalWTA;
+
 int main(int argc, char *argv[])
 {
     // initialize all
     init();
+
+    signal(SIGINT, clearResources);
 
     printf("scheduler starting...\n");
 
@@ -84,6 +99,7 @@ int main(int argc, char *argv[])
     //Delete the data of a process when it gets noties that it nished.
     fclose(logFile);
     outputPref();
+    fclose(memoryLog);
     printf("scheduler terminates...\n");
     destroyClk(true);
 }
@@ -95,9 +111,13 @@ void init()
     TotalRunningTimes = 0;
     TotalWaitings = 0;
     TotalWTA = 0;
-    //open log file to write
+    //open scheduler log file to write
     logFile = fopen("scheduler.log", "w");
     fprintf(logFile, "#At Time\tx\tprocess\tY\tstate arr\tw\ttotal\tz\tremain\ty\twait\tk\n");
+    //open memory log file to write
+    memoryLog = fopen("memory.log", "w");
+
+    fprintf(memoryLog, "#At time\tx\tallocated\ty\tbytes for process\tz\tfrom\ti\tto\tj\n");
     /* Creating Semaphores */
     key_t key_id_sem_scheduler = ftok("keyFile", 's');
     key_t key_id_sem_generator = ftok("keyFile", 'g');
@@ -129,13 +149,18 @@ void init()
 
     // init signal handler
     signal(SIGUSR1, processTerminatedHandler);
+
+    // init memory
+    insertAndCreateMemory(MEMORY_SIZE, 0, 1023);
 }
 
-int forkNewProcess(int id, int remainingTime)
+int forkNewProcess(Node *processNode)
 {
     int processPID = fork();
     if (processPID == 0)
     {
+        int id = processNode->process.id;
+        int remainingTime = processNode->PCB.remainingTime;
         // convert args to char*
         char execStr1[MAX_DIGITS + 1];
         char execStr2[MAX_DIGITS + 1];
@@ -154,6 +179,7 @@ int forkNewProcess(int id, int remainingTime)
         exit(1);
     }
 
+    allocateMemoryFor(processNode);
     return processPID;
 }
 
@@ -175,6 +201,7 @@ Node *storeProcessData()
     newNode->PCB.PID = -1; // -1 means the process not created
     newNode->PCB.shmid = -1;
     newNode->PCB.semid = -1;
+    newNode->PCB.memBlock = NULL;
     // insert new process to the linked list
     insert(&head, &newNode);
 
@@ -231,10 +258,7 @@ void resumeProcess(Node *processNode)
 
     // set process state to running
     processNode->PCB.processState = RUNNING;
-    int arrivalTime = processNode->process.arrivaltime;
-    int executionTime = processNode->PCB.executionTime;
 
-    processNode->PCB.waitingTime = getClk() - arrivalTime - executionTime;
     // if this is the first time i run the process
     if (processNode->PCB.PID == -1)
     {
@@ -244,9 +268,7 @@ void resumeProcess(Node *processNode)
                 processNode->process.arrivaltime, processNode->process.runningtime,
                 processNode->PCB.remainingTime, processNode->PCB.waitingTime);
 
-        processNode->PCB.PID = forkNewProcess(
-            processNode->process.id,
-            processNode->process.runningtime);
+        processNode->PCB.PID = forkNewProcess(processNode);
         processNode->PCB.shmid = initShm(processNode->process.id);
         processNode->PCB.semid = initSem(processNode->process.id);
     }
@@ -281,14 +303,16 @@ void removeProcess(Node *processNode)
         float WTA = TA / (1.0 * processNode->process.runningtime);
         vec_push_back(WTAs, WTA);
         TotalWTA += WTA;
+
         TotalRunningTimes += processNode->process.runningtime;
         processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
         TotalWaitings += processNode->PCB.waitingTime;
+
         fprintf(logFile, "At Time\t%d\tprocess\t%d\tfinished arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\tTA\t%d\tWTA\t%.2f\n", getClk(), processNode->process.id,
                 processNode->process.arrivaltime, processNode->process.runningtime,
                 processNode->PCB.remainingTime, processNode->PCB.waitingTime, TA, WTA);
+        deallocateMemory(deletedProcess);
         free(deletedProcess);
-
         remainingProcesses--;
     }
 }
@@ -362,16 +386,25 @@ void shortestRemainingTimeNext()
         now = getClk();
         Node *newNode = readProcessesData();
         sortNewProcessesWithRemainingTime(newNode);
-
-        if (remainingProcesses && newNode)
+        // Each clock we iterate the linked list starting from the head (as the linked list is sorted by remaining time)
+        // searching for the first process that is available to be allocated (or already allocated)
+        if (remainingProcesses)
         {
             lastRunningProcessNode = runningProcessNode;
             if (runningProcessNode == NULL)
                 runningProcessNode = head;
             else if (head && head->PCB.remainingTime < runningProcessNode->PCB.remainingTime)
+                runningProcessNode = head;
+            while (!isMemoryAvailableFor(runningProcessNode))
+            {
+                runningProcessNode = runningProcessNode->next;
+                if (!runningProcessNode)
+                    runningProcessNode = head;
+            }
+            // stop the lastRunningProcess if it is not the same as the running process
+            if (runningProcessNode->PCB.processState == WAITING)
             {
                 stopProcess(lastRunningProcessNode);
-                runningProcessNode = head;
             }
         }
 
@@ -407,11 +440,19 @@ void roundRobin(int quantum)
         if (remainingProcesses && currentQuantum <= 0)
         {
             lastRunningProcessNode = runningProcessNode;
+
             // if runningProcess is at the end of the linked list run the first process
             if (!runningProcessNode || !runningProcessNode->next)
                 runningProcessNode = head;
             else
                 runningProcessNode = runningProcessNode->next;
+
+            while (!isMemoryAvailableFor(runningProcessNode))
+            {
+                runningProcessNode = runningProcessNode->next;
+                if (!runningProcessNode)
+                    runningProcessNode = head;
+            }
 
             if (runningProcessNode->PCB.processState == WAITING)
             {
@@ -557,6 +598,210 @@ void sortNewProcessesWithRemainingTime(Node *processNode)
         processNode = nextNode;
     }
 }
+
+// Calculates log2 of number.
+int Log2(int n)
+{
+    int res = 0;
+    n--;
+    while (n)
+    {
+        res++;
+        n >>= 1;
+    }
+    return res;
+}
+
+memoryBlock *allocateMemory(int mem)
+{
+    printf("allocated memory from %d to %d Time = %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->end, getClk());
+    memoryBlock *allocatedMemoryBlock = memoryBlocks[mem];
+    memoryBlocks[mem] = memoryBlocks[mem]->next;
+
+    //printMem();
+    allocatedMemoryBlock->next = NULL;
+    return allocatedMemoryBlock;
+}
+
+void splitMemory(int mem)
+{
+    memoryBlock *deletedMemoryBlock = memoryBlocks[mem];
+    memoryBlocks[mem] = memoryBlocks[mem]->next;
+    int mid = (deletedMemoryBlock->end - deletedMemoryBlock->start + 1) / 2;
+    insertAndCreateMemory(mem - 1, deletedMemoryBlock->start, deletedMemoryBlock->start + mid - 1);
+    insertAndCreateMemory(mem - 1, deletedMemoryBlock->start + mid, deletedMemoryBlock->end);
+    free(deletedMemoryBlock);
+}
+
+void insertAndCreateMemory(int mem, int start, int end)
+{
+    memoryBlock *memBlock = (memoryBlock *)malloc(sizeof(memoryBlock));
+    memBlock->start = start;
+    memBlock->end = end;
+    memBlock->next = NULL;
+
+    insertMemory(mem, memBlock);
+}
+
+void insertMemory(int mem, memoryBlock *memBlock)
+{
+    //printf("inserted mem from %d to %d \n", memBlock->start, memBlock->end);
+    if (!memoryBlocks[mem])
+    {
+        memoryBlocks[mem] = memBlock;
+        return;
+    }
+
+    if (memoryBlocks[mem]->start > memBlock->start)
+    {
+        memoryBlock *nxt = memoryBlocks[mem];
+        memoryBlocks[mem] = memBlock;
+        memBlock->next = nxt;
+    }
+
+    memoryBlock *headMem = memoryBlocks[mem];
+
+    while (headMem->next && headMem->next->start < memBlock->start)
+        headMem = headMem->next;
+
+    memoryBlock *nxt = headMem->next;
+    headMem->next = memBlock;
+    memBlock->next = nxt;
+}
+
+void printMem()
+{
+    for (int mem = 0; mem <= MEMORY_SIZE; mem++)
+    {
+        memoryBlock *headMem = memoryBlocks[mem];
+        if (!headMem)
+            continue;
+        printf("mem : %d   ", mem);
+        while (headMem)
+        {
+            printf("start : %d end : %d, ", headMem->start, headMem->end);
+            headMem = headMem->next;
+        }
+        printf("\n");
+    }
+}
+
+/* allocate memory for a process */
+void allocateMemoryFor(Node *processNode)
+{
+    int mem = Log2(processNode->process.memsize);
+    if (memoryBlocks[mem])
+    {
+        fprintf(memoryLog, "At time\t%d\tallocated\t%d\tbytes for process\t%d\tfrom\t%d\tto\t%d\n", getClk(), processNode->process.memsize,
+                processNode->process.id, memoryBlocks[mem]->start, memoryBlocks[mem]->end);
+        processNode->PCB.memBlock = allocateMemory(mem);
+        return;
+    }
+
+    int memIdx;
+    for (memIdx = mem + 1; memIdx <= MEMORY_SIZE && !memoryBlocks[memIdx]; memIdx++)
+        ;
+
+    if (memIdx > MEMORY_SIZE)
+    {
+        perror("You Don't have enough memory!!\n");
+        exit(1);
+    }
+
+    while (memIdx != mem)
+        splitMemory(memIdx--);
+
+    fprintf(memoryLog, "At time\t%d\tallocated\t%d\tbytes for process\t%d\tfrom\t%d\tto\t%d\n", getClk(), processNode->process.memsize,
+            processNode->process.id, memoryBlocks[mem]->start, memoryBlocks[mem]->end);
+    processNode->PCB.memBlock = allocateMemory(mem);
+}
+
+void deallocateMemory(Node *processNode)
+{
+    memoryBlock *memBlock = processNode->PCB.memBlock;
+    int mem = Log2(memBlock->end - memBlock->start);
+    insertMemory(mem, memBlock);
+
+    printf("freed memory from %d to %d Time = %d\n", memBlock->start, memBlock->end, getClk());
+    fprintf(memoryLog, "At time\t%d\tfreed\t%d\tbytes from process\t%d\tfrom\t%d\tto\t%d\n", getClk(), processNode->process.memsize,
+            processNode->process.id, memBlock->start, memBlock->end);
+    bool found = true;
+    while (found)
+    {
+        found = false;
+
+        if (!memoryBlocks[mem] || !memoryBlocks[mem]->next)
+            break;
+
+        //printf("start %d  start %d\n", memoryBlocks[mem]->start, memoryBlocks[mem]->next->start);
+        memoryBlock *headMem = memoryBlocks[mem];
+        while (headMem && headMem->next)
+        {
+            if (headMem->end + 1 == headMem->next->start)
+            {
+                // Todo : change this
+                int blockSize = headMem->next->end - headMem->start + 1;
+                if (headMem->start % blockSize == 0)
+                {
+                    found = true;
+                    memoryBlock *nxt = headMem->next;
+                    headMem->next = nxt->next;
+
+                    //printf("st : %d  en : %d\n", headMem->start, nxt->end);
+
+                    insertAndCreateMemory(mem + 1, headMem->start, nxt->end);
+
+                    headMem->start = -1; // will be deleted
+
+                    free(nxt);
+                }
+            }
+            headMem = headMem->next;
+        }
+
+        if (!found)
+            break;
+
+        // now delete temp memBlocks
+        while (memoryBlocks[mem] && memoryBlocks[mem]->start == -1)
+        {
+            // remove it and skip
+            memoryBlock *temp = memoryBlocks[mem];
+            memoryBlocks[mem] = memoryBlocks[mem]->next;
+            free(temp);
+        }
+
+        headMem = memoryBlocks[mem];
+        while (headMem && headMem->next)
+        {
+            if (headMem->next->start == -1)
+            {
+                memoryBlock *temp = headMem->next;
+                headMem->next = temp->next;
+                free(temp);
+            }
+            headMem = headMem->next;
+        }
+
+        mem++;
+    }
+
+    //printMem();
+}
+
+void clearResources(int signum)
+{
+    // remove memory
+    for (int i = 0; i <= MEMORY_SIZE; i++)
+    {
+        while (memoryBlocks[i])
+        {
+            memoryBlock *tmp = memoryBlocks[i];
+            memoryBlocks[i] = memoryBlocks[i]->next;
+            free(tmp);
+        }
+    }
+}
 void outputPref()
 {
     prefFIle = fopen("scheduler.perf", "w");
@@ -573,4 +818,24 @@ void outputPref()
     STDWTA = sqrt(STDWTA / numberOfProcesses);
     fprintf(prefFIle, "Std WTA = %.2f\n", STDWTA);
     fclose(prefFIle);
+}
+
+bool isMemoryAvailableFor(Node *processNode)
+{
+    if (processNode == NULL)
+        return 0;
+
+    if (processNode->PCB.PID != -1)
+        return 1;
+
+    int mem = Log2(processNode->process.memsize);
+
+    int memIdx;
+    for (memIdx = mem; memIdx <= MEMORY_SIZE && !memoryBlocks[memIdx]; memIdx++)
+        ;
+
+    if (memIdx > MEMORY_SIZE)
+        return 0;
+
+    return 1;
 }

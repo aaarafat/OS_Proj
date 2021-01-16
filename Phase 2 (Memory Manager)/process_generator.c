@@ -151,7 +151,7 @@ void readProcesses(FILE *fptr, process *parr)
             continue;
         }
         fseek(fptr, -1L, SEEK_CUR);
-        fscanf(fptr, "%d\t%d\t%d\t%d\n", &parr[i].id, &parr[i].arrivaltime, &parr[i].runningtime, &parr[i].priority);
+        fscanf(fptr, "%d\t%d\t%d\t%d\t%d\n", &parr[i].id, &parr[i].arrivaltime, &parr[i].runningtime, &parr[i].priority, &parr[i].memsize);
         i++;
     }
 }

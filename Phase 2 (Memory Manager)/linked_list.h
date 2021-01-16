@@ -18,6 +18,7 @@ struct PCB_Struct
   int PID;
   int shmid;
   int semid;
+  struct memoryBlockStruct *memBlock;
 };
 
 typedef struct PCB_Struct PCB;
@@ -32,6 +33,15 @@ struct NodeStruct
 };
 
 typedef struct NodeStruct Node;
+
+/* memory block struct for Buddy Memory Allocation Algorithm*/
+struct memoryBlockStruct
+{
+  int start, end;
+  struct memoryBlockStruct *next;
+};
+
+typedef struct memoryBlockStruct memoryBlock;
 
 /* create empty linked list */
 Node *createLinkedList()
@@ -132,6 +142,7 @@ void insertionSortWithRemainingTime(Node **head, Node **newNode)
     (*newNode)->prev = tmpNode;
   }
 }
+
 /* 
 remove a node from linkec list with the given id
 returns the removed Node 

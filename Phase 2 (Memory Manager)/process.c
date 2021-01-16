@@ -44,7 +44,6 @@ int main(int argc, char *argv[])
         remainingTime = remainingTime - (currentClock - perviousClock);
         setShmValue(remainingTime, shmIdOfRemainingTime);
         //printf("rem : %d\n", remainingTime);
-
         up(sem_id_scheduler);
     }
     //printf("process id = %d finished\n", id);
