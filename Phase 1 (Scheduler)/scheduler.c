@@ -219,7 +219,7 @@ Node *readProcessesData()
 
 void resumeProcess(Node *processNode)
 {
-    if (!processNode)
+    if (!processNode || processNode->PCB.processState == TERMINATED)
         return;
 
     if (processNode->PCB.processState == RUNNING)
