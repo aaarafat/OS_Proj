@@ -435,8 +435,12 @@ void roundRobin(int quantum)
             else
                 runningProcessNode = runningProcessNode->next;
 
-            if (!isMemoryAvailableFor(runningProcessNode))
-                runningProcessNode = head;
+            while (!isMemoryAvailableFor(runningProcessNode))
+            {
+                runningProcessNode = runningProcessNode->next;
+                if (!runningProcessNode)
+                    runningProcessNode = head;
+            }
 
             if (runningProcessNode->PCB.processState == WAITING)
             {
