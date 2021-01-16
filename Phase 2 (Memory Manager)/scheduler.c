@@ -382,17 +382,25 @@ void shortestRemainingTimeNext()
         now = getClk();
         Node *newNode = readProcessesData();
         sortNewProcessesWithRemainingTime(newNode);
-
-        if (remainingProcesses && newNode)
+        // Each clock we iterate the linked list starting from the head (as the linked list is sorted by remaining time)
+        // searching for the first process that is available to be allocated (or already allocated)
+        if (remainingProcesses)
         {
             lastRunningProcessNode = runningProcessNode;
             if (runningProcessNode == NULL)
                 runningProcessNode = head;
             else if (head && head->PCB.remainingTime < runningProcessNode->PCB.remainingTime)
-            {
-
-                stopProcess(lastRunningProcessNode);
                 runningProcessNode = head;
+            while (!isMemoryAvailableFor(runningProcessNode))
+            {
+                runningProcessNode = runningProcessNode->next;
+                if (!runningProcessNode)
+                    runningProcessNode = head;
+            }
+            // stop the lastRunningProcess if it is not the same as the running process
+            if (runningProcessNode->PCB.processState == WAITING)
+            {
+                stopProcess(lastRunningProcessNode);
             }
         }
 
