@@ -24,37 +24,37 @@ union Semun
 };
 void cleanSegements(int bufferid)
 {
-    if (shmget(ftok("key", 300), sizeof(int) * 4, 0644) != -1)
+    if (shmget(ftok("key.k", 300), sizeof(int) * 4, 0644) != -1)
     {
-        shmctl(shmget(ftok("key", 300), sizeof(int) * 4, 0644), IPC_RMID, (struct shmid_ds *)0);
+        shmctl(shmget(ftok("key.k", 300), sizeof(int) * 4, 0644), IPC_RMID, (struct shmid_ds *)0);
     }
     if (bufferid != -1)
     {
         shmctl(bufferid, IPC_RMID, (struct shmid_ds *)0);
     }
-    if (msgget(ftok("key", 302), 0666) != -1)
+    if (msgget(ftok("key.k", 302), 0666) != -1)
     {
-        msgctl(msgget(ftok("key", 302), 0666), IPC_RMID, (struct msqid_ds *)0);
+        msgctl(msgget(ftok("key.k", 302), 0666), IPC_RMID, (struct msqid_ds *)0);
     }
-    if (semget(ftok("key", 303), 1, 0666) != -1)
+    if (semget(ftok("key.k", 303), 1, 0666) != -1)
     {
-        semctl(semget(ftok("key", 303), 1, 0666), 0, IPC_RMID);
+        semctl(semget(ftok("key.k", 303), 1, 0666), 0, IPC_RMID);
     }
-    if (semget(ftok("key", 102), 1, 0666) != -1)
+    if (semget(ftok("key.k", 102), 1, 0666) != -1)
     {
-        semctl(semget(ftok("key", 102), 1, 0666), 0, IPC_RMID);
+        semctl(semget(ftok("key.k", 102), 1, 0666), 0, IPC_RMID);
     }
-    if (semget(ftok("key", 101), 1, 0666) != -1)
+    if (semget(ftok("key.k", 101), 1, 0666) != -1)
     {
-        semctl(semget(ftok("key", 101), 1, 0666), 0, IPC_RMID);
+        semctl(semget(ftok("key.k", 101), 1, 0666), 0, IPC_RMID);
     }
-    if (semget(ftok("key", 702), 1, 0666) != -1)
+    if (semget(ftok("key.k", 702), 1, 0666) != -1)
     {
-        semctl(semget(ftok("key", 702), 1, 0666), 0, IPC_RMID);
+        semctl(semget(ftok("key.k", 702), 1, 0666), 0, IPC_RMID);
     }
-    if (semget(ftok("key", 701), 1, 0666) != -1)
+    if (semget(ftok("key.k", 701), 1, 0666) != -1)
     {
-        semctl(semget(ftok("key", 701), 1, 0666), 0, IPC_RMID);
+        semctl(semget(ftok("key.k", 701), 1, 0666), 0, IPC_RMID);
     }
 }
 void down(int sem)
@@ -111,13 +111,13 @@ int main()
     bdata[3] = 0;    // remove from here
     int buff[bsize]; // buffer array itself
     //// ----------- this part is to prevent more than one procces to read the buffer size ---------
-    producer = semget(ftok("key", 101), 1, 0666);
-    full = semget(ftok("key", 701), 1, 0666 | IPC_CREAT);
-    empty = semget(ftok("key", 702), 1, 0666 | IPC_CREAT);
+    producer = semget(ftok("key.k", 101), 1, 0666);
+    full = semget(ftok("key.k", 701), 1, 0666 | IPC_CREAT);
+    empty = semget(ftok("key.k", 702), 1, 0666 | IPC_CREAT);
     if (producer == -1) // if this is the first producer to run then intialize the semph
     {
 
-        producer = semget(ftok("key", 101), 1, 0666 | IPC_CREAT);
+        producer = semget(ftok("key.k", 101), 1, 0666 | IPC_CREAT);
         semun.val = 1;
         if (semctl(producer, 0, SETVAL, semun) == -1)
         {
@@ -127,13 +127,13 @@ int main()
             exit(-1);
         }
     }
-    consumer = semget(ftok("key", 102), 1, 0666);
+    consumer = semget(ftok("key.k", 102), 1, 0666);
     down(producer);
     if (consumer != -1) // if this is true then there is a consumer that started first
         //so we will wait until it's done reading
         down(consumer);
-    bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
-    mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
+    bdataid = shmget(ftok("key.k", 300), sizeof(int) * 4, 0644);
+    mutex = semget(ftok("key.k", 303), 1, 0666 | IPC_CREAT);
     int *pdata;
     if (bdataid == -1)
     {
@@ -141,7 +141,7 @@ int main()
         printf("Enter buffer size : \n");
         scanf("%d", &bsize);
         bdata[0] = bsize;
-        bdataid = shmget(ftok("key", 300), sizeof(int) * 4, IPC_CREAT | 0644);
+        bdataid = shmget(ftok("key.k", 300), sizeof(int) * 4, IPC_CREAT | 0644);
 
         semun.val = bsize;
         if (semctl(empty, 0, SETVAL, semun) == -1)
@@ -201,7 +201,7 @@ int main()
         exit(-1);
     }
     pdata = (int *)shmaddr1;
-    bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
+    bufferid = shmget(ftok("key.k", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
     void *shmaddr2 = shmat(bufferid, (void *)0, 0);
     if (*((int *)shmaddr2) == -1)
     {
