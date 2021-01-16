@@ -9,7 +9,6 @@
 #include <sys/shm.h>
 #include <sys/sem.h>
 #include <sys/msg.h>
-#include <signal.h>
 #define BSZ 0
 #define NUM 1
 #define ADD 2
@@ -22,33 +21,7 @@ union Semun
     struct seminfo *__buf; /* buffer for IPC_INFO */
     void *__pad;
 };
-void cleanSegements(int bdataid, int bufferid, int msgq_id, int mutex, int consumer, int producer)
-{
-    if (shmget(ftok("key", 300), sizeof(int) * 4, 0644) != -1)
-    {
-        shmctl(shmget(ftok("key", 300), sizeof(int) * 4, 0644), IPC_RMID, (struct shmid_ds *)0);
-    }
-    if (bufferid != -1)
-    {
-        shmctl(bufferid, IPC_RMID, (struct shmid_ds *)0);
-    }
-    if (msgget(ftok("key", 302), 0666) != -1)
-    {
-        msgctl(msgget(ftok("key", 302), 0666), IPC_RMID, (struct msqid_ds *)0);
-    }
-    if (semget(ftok("key", 303), 1, 0666) != -1)
-    {
-        semctl(semget(ftok("key", 303), 1, 0666), 0, IPC_RMID);
-    }
-    if (semget(ftok("key", 102), 1, 0666) != -1)
-    {
-        semctl(semget(ftok("key", 102), 1, 0666), 0, IPC_RMID);
-    }
-    if (semget(ftok("key", 101), 1, 0666) != -1)
-    {
-        semctl(semget(ftok("key", 101), 1, 0666), 0, IPC_RMID);
-    }
-}
+
 void down(int sem)
 {
     struct sembuf p_op;
@@ -84,15 +57,9 @@ struct msgbuff
     long mtype;
     char mtext[70];
 };
-int bdataid = -1, bufferid = -1, msgq_id = -1, mutex = -1, consumer = -1, producer = -1;
-void handler(int signum)
-{
-    cleanSegements(bdataid, bufferid, msgq_id, mutex, consumer, producer);
-    killpg(getpgrp(), SIGKILL);
-}
+
 int main()
 {
-    signal(SIGINT, handler);
     union Semun semun;
     int send_val, rec_val;
     int bsize = 0;
@@ -102,32 +69,24 @@ int main()
     bdata[2] = 0;    // add here
     bdata[3] = 0;    // remove from here
     int buff[bsize]; // buffer array itself
-    //// ----------- this part is to prevent more than one procces to read the buffer size ---------
-    producer = semget(ftok("key", 101), 1, 0666);
-    if (producer == -1) // if this is the first producer to run then intialize the semph
+    int producer = semget(ftok("key", 101), 1, 0666 | IPC_CREAT);
+    semun.val = 1; /* initial value of the semaphore, Binary semaphore */
+    if (semctl(producer, 0, SETVAL, semun) == -1)
     {
 
-        producer = semget(ftok("key", 101), 1, 0666 | IPC_CREAT);
-        semun.val = 1;
-        if (semctl(producer, 0, SETVAL, semun) == -1)
-        {
-
-            perror("Error in semctl");
-            exit(-1);
-        }
+        perror("Error in semctl");
+        exit(-1);
     }
-    consumer = semget(ftok("key", 102), 1, 0666);
+    int consumer = semget(ftok("key", 102), 1, 0666);
     down(producer);
-    if (consumer != -1) // if this is true then there is a consumer that started first
-        //so we will wait until it's done reading
+    if (consumer != -1)
         down(consumer);
-    bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
-    msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
-
+    int bdataid = shmget(ftok("key", 300), sizeof(int) * 4, 0644);
+    int msgq_id = msgget(ftok("key", 302), 0666 | IPC_CREAT);
+    int mutex = semget(ftok("key", 303), 1, 0666 | IPC_CREAT);
     int *pdata;
     if (bdataid == -1)
     {
-        //read the buffer size
         printf("Enter buffer size : \n");
         scanf("%d", &bsize);
         bdata[0] = bsize;
@@ -147,8 +106,6 @@ int main()
     if (consumer != -1)
         up(consumer);
     up(producer);
-    //// ----------------- done reading from the user ---------------
-
     if (bdataid == -1 || mutex == -1 || msgq_id == -1)
     {
         perror("Error in create");
@@ -169,7 +126,7 @@ int main()
         exit(-1);
     }
     pdata = (int *)shmaddr1;
-    bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
+    int bufferid = shmget(ftok("key", 301), sizeof(int) * pdata[BSZ], IPC_CREAT | 0644);
     void *shmaddr2 = shmat(bufferid, (void *)0, 0);
     if (*((int *)shmaddr2) == -1)
     {
@@ -189,9 +146,7 @@ int main()
             exit(1);                       /* overflow */
         else if (pdata[NUM] == pdata[BSZ]) /* block if buffer is full */
         {
-            up(mutex); // release the control for the consumer to run
-            // wait till the consumer notify the producer
-            printf("waiting for notify");
+            up(mutex);
             rec_val = msgrcv(msgq_id, &message, sizeof(message.mtext), 1, !IPC_NOWAIT);
             if (rec_val == -1)
                 perror("Error in receive");
@@ -199,16 +154,17 @@ int main()
         }
 
         /* if executing here, buffer not full so add element */
-        pbuffer[pdata[ADD]] = i;
+        int e = i + 20;
+        pbuffer[pdata[ADD]] = e;
         pdata[ADD] = (pdata[ADD] + 1) % pdata[BSZ];
         pdata[NUM]++;
         up(mutex);
-        printf("producer: inserted %d\n", i);
-        sleep(1);            /*uncomment to make the producer sleep after producing*/
+        printf("producer: inserted %d\n", e);
+        sleep(3);
         if (pdata[NUM] == 1) /*the buffer was empty */
         {
             char str[] = "consume";
-            message.mtype = 2;
+            message.mtype = 2; /* arbitrary value */
             strcpy(message.mtext, str);
             send_val = msgsnd(msgq_id, &message, sizeof(message.mtext), !IPC_NOWAIT);
             if (send_val == -1)

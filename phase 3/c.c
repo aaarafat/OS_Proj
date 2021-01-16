@@ -28,23 +28,31 @@ union Semun
     struct seminfo *__buf; /* buffer for IPC_INFO */
     void *__pad;
 };
-void cleanSegements(int bdataid, int bufferid, int msgq_id, int mutex)
+void cleanSegements(int bdataid, int bufferid, int msgq_id, int mutex, int consumer, int producer)
 {
-    if (bdataid != -1)
+    if (shmget(ftok("key", 300), sizeof(int) * 4, 0644) != -1)
     {
-        shmctl(bdataid, IPC_RMID, (struct shmid_ds *)0);
+        shmctl(shmget(ftok("key", 300), sizeof(int) * 4, 0644), IPC_RMID, (struct shmid_ds *)0);
     }
     if (bufferid != -1)
     {
         shmctl(bufferid, IPC_RMID, (struct shmid_ds *)0);
     }
-    if (msgq_id != -1)
+    if (msgget(ftok("key", 302), 0666) != -1)
     {
-        msgctl(msgq_id, IPC_RMID, (struct msqid_ds *)0);
+        msgctl(msgget(ftok("key", 302), 0666), IPC_RMID, (struct msqid_ds *)0);
     }
-    if (mutex != -1)
+    if (semget(ftok("key", 303), 1, 0666) != -1)
     {
-        semctl(mutex, 0, IPC_RMID);
+        semctl(semget(ftok("key", 303), 1, 0666), 0, IPC_RMID);
+    }
+    if (semget(ftok("key", 102), 1, 0666) != -1)
+    {
+        semctl(semget(ftok("key", 102), 1, 0666), 0, IPC_RMID);
+    }
+    if (semget(ftok("key", 101), 1, 0666) != -1)
+    {
+        semctl(semget(ftok("key", 101), 1, 0666), 0, IPC_RMID);
     }
 }
 void down(int sem)
@@ -76,10 +84,10 @@ void up(int sem)
         exit(-1);
     }
 }
-int bdataid = -1, bufferid = -1, msgq_id = -1, mutex = -1;
+int bdataid = -1, bufferid = -1, msgq_id = -1, mutex = -1, consumer = -1, producer = -1;
 void handler(int signum)
 {
-    cleanSegements(bdataid, bufferid, msgq_id, mutex);
+    cleanSegements(bdataid, bufferid, msgq_id, mutex, consumer, producer);
     killpg(getpgrp(), SIGKILL);
 }
 int main()
@@ -94,15 +102,19 @@ int main()
     bdata[2] = 0;    // add here
     bdata[3] = 0;    // remove from here
     int buff[bsize]; // buffer array itself
-    int consumer = semget(ftok("key", 102), 1, 0666 | IPC_CREAT);
-    semun.val = 1; /* initial value of the semaphore, Binary semaphore */
-    if (semctl(consumer, 0, SETVAL, semun) == -1)
+    consumer = semget(ftok("key", 102), 1, 0666);
+    if (consumer == -1) // if this is the first consumer to run then intialize the semph
     {
+        consumer = semget(ftok("key", 102), 1, 0666 | IPC_CREAT);
+        semun.val = 1; /* initial value of the semaphore, Binary semaphore */
+        if (semctl(consumer, 0, SETVAL, semun) == -1)
+        {
 
-        perror("Error in semctl");
-        exit(-1);
+            perror("Error in semctl");
+            exit(-1);
+        }
     }
-    int producer = semget(ftok("key", 101), 1, 0666);
+    producer = semget(ftok("key", 101), 1, 0666);
     down(consumer);
     if (producer != -1)
     {
@@ -142,12 +154,10 @@ int main()
     up(consumer);
     ////////////////////// wait and attach the shared memory ////////////////////////////////
     void *shmaddr = shmat(bdataid, (void *)0, 0);
-    printf("attached to shared memory \n");
-
     if (*((int *)shmaddr) == -1)
     {
         perror("Error in attach in data writer");
-        cleanSegements(bdataid, bufferid, msgq_id, mutex);
+        cleanSegements(bdataid, bufferid, msgq_id, mutex, consumer, producer);
         exit(-1);
     }
 
@@ -157,12 +167,11 @@ int main()
     if (*((int *)shmaddr2) == -1)
     {
         perror("Error in attach in buffer writer");
-        cleanSegements(bdataid, bufferid, msgq_id, mutex);
+        cleanSegements(bdataid, bufferid, msgq_id, mutex, consumer, producer);
         exit(-1);
     }
     int *pbuffer = (int *)shmaddr2;
     ////////////////////// ================================= ////////////////////////////////
-    printf("Consumer is attached to the shared memory\n");
     struct msgbuff message;
     int i;
     while (1)
@@ -172,7 +181,7 @@ int main()
         if (pdata[NUM] < 0)
         {
             exit(1); /* underflow */
-            cleanSegements(bdataid, bufferid, msgq_id, mutex);
+            cleanSegements(bdataid, bufferid, msgq_id, mutex, consumer, producer);
         }
         else if (pdata[NUM] == 0) /* block if buffer empty */
         {
@@ -187,6 +196,7 @@ int main()
         pdata[REM] = (pdata[REM] + 1) % pdata[BSZ];
         pdata[NUM]--;
         printf("Consume value %d\n", i);
+        sleep(3);                         /*uncomment to make the consumer sleep after consuming*/
         if (pdata[NUM] == pdata[BSZ] - 1) /* buffer was full */
         {
             char str[] = "produce";
