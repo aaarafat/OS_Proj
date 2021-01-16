@@ -47,8 +47,6 @@ int main(int argc, char *argv[])
         up(sem_id_scheduler);
     }
     //printf("process id = %d finished\n", id);
-    //send signal to parent on termination after finishing the remaining time
-    kill(getppid(), SIGUSR1);
 
     deleteShm(shmIdOfRemainingTime);
     semctl(sem_id_process, 1, IPC_RMID, (union Semun *)0);

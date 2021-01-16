@@ -3,7 +3,6 @@
 #include <math.h>
 
 void init();
-void processTerminatedHandler(int signum);
 
 // --------ALgorithms------
 void highestPriorityFirst();
@@ -126,9 +125,6 @@ void init()
 
     // initialize clock
     initClk();
-
-    // init signal handler
-    signal(SIGUSR1, processTerminatedHandler);
 }
 
 int forkNewProcess(int id, int remainingTime)
@@ -284,6 +280,7 @@ void removeProcess(Node *processNode)
         TotalRunningTimes += processNode->process.runningtime;
         processNode->PCB.waitingTime = getClk() - processNode->process.arrivaltime - processNode->PCB.executionTime;
         TotalWaitings += processNode->PCB.waitingTime;
+        printf("process ID=%d terminated  Time = %d\n", processNode->process.id, getClk());
         fprintf(logFile, "At Time\t%d\tprocess\t%d\tfinished arr\t%d\ttotal\t%d\tremain\t%d\twait\t%d\tTA\t%d\tWTA\t%.2f\n", getClk(), processNode->process.id,
                 processNode->process.arrivaltime, processNode->process.runningtime,
                 processNode->PCB.remainingTime, processNode->PCB.waitingTime, TA, WTA);
@@ -490,15 +487,6 @@ int getShmValue(int shmid)
     int value = *shmaddr;
     shmdt(shmaddr);
     return value;
-}
-
-void processTerminatedHandler(int signum)
-{
-    int stat_loc, pid;
-    pid = wait(&stat_loc);
-    int id = stat_loc >> 8;
-
-    printf("process ID=%d terminated  Time = %d\n", id, getClk());
 }
 
 /*insert new nodes in a sorted way according to there pirorities*/
