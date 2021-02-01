@@ -49,7 +49,7 @@ I/O, using other resources than CPU or waiting on unavailable resource).
   - No process can arrive at 0 (this causes inconsistency as the program requires time to initialize)
   - In phase 2 RR, If a process cannot be allocated (insufficient memory) it proceeds to the next process and if it is at the end it wraps around.
   - In phase 2, If 2 or more processes have the same everything except memory size it does NOT get sorted by the memory size. We just get the same order of the process generator.
-  - The compiled programs is **.out** (not .o). it matters as we arecalling them by name in the code.<br/> You can use this snippet for compiling the program. <br/> PS: the -lm argument while compiling scheduler is necessary.
+  - The compiled programs is **.out** (not .o). it matters as we are calling them by name in the code.<br/> You can use this snippet for compiling the program. <br/> PS: the -lm argument while compiling scheduler is necessary.
   ```sh 
   gcc process_generator.c -o process_generator.out
   gcc clk.c -o clk.out
