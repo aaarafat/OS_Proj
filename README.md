@@ -4,7 +4,7 @@
   [![GitHub issues](https://img.shields.io/github/issues/D4rk1n/OS_Proj)](https://github.com/D4rk1n/OS_Proj/issues)
   [![GitHub forks](https://img.shields.io/github/forks/D4rk1n/OS_Proj)](https://github.com/D4rk1n/OS_Proj/network)
   [![GitHub stars](https://img.shields.io/github/stars/D4rk1n/OS_Proj)](https://github.com/D4rk1n/OS_Proj/stargazers)
-  [![GitHub license](https://img.shields.io/github/license/D4rk1n/OS_Proj)](https://github.com/D4rk1n/OS_Proj/blob/master/LICENSE)
+  [![GitHub license](https://img.shields.io/github/license/D4rk1n/OS_Proj)](https://github.com/D4rk1n/OS_Proj/blob/main/LICENSE)
   <img src="https://img.shields.io/github/languages/count/D4rk1n/OS_Proj" />
   <img src="https://img.shields.io/github/languages/top/D4rk1n/OS_Proj" />
   <img src="https://img.shields.io/github/languages/code-size/D4rk1n/OS_Proj" />
