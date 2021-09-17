@@ -98,11 +98,7 @@ int main(int argc, char *argv[])
     if (sendValue == -1)
         perror("Error in send");
 
-    while (true)
-        ;
-
-    // 7. Clear clock resources
-    destroyClk(true);
+    pause();
 }
 
 void clearResources(int signum)
